@@ -4,7 +4,7 @@ on: [push]
 
 jobs:
   build:
-    runs-on: ubuntu-22.04 # লেটেস্টের বদলে স্টেবল সার্ভার ব্যবহার করছি
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout Repository
@@ -22,11 +22,13 @@ jobs:
         with:
           ndk-version: r21e
 
-      - name: 🛠️ Fix Android SDK (Remove ext19 Bug)
+      - name: 🛠️ Ultimate SDK Fix (Kill all ext bugs)
         run: |
-          # Qt 5.15 যেন ext19 পড়তে গিয়ে ক্র্যাশ না করে, তাই এগুলো ডিলিট করে দিচ্ছি
-          rm -rf $ANDROID_SDK_ROOT/platforms/android-36*
-          rm -rf $ANDROID_SDK_ROOT/platforms/android-35*
+          # Qt-কে কনফিউজ করা সব ext ফোল্ডার এবং নতুন আনস্টেবল ভার্সনগুলো ডিলিট
+          rm -rf $ANDROID_SDK_ROOT/platforms/android-*ext*
+          rm -rf $ANDROID_SDK_ROOT/platforms/android-3[2-9]*
+          # একদম ফ্রেশ এবং স্টেবল Android 31 ইন্সটল
+          yes | sdkmanager "platforms;android-31"
 
       - name: Install Qt for Android
         uses: jurplel/install-qt-action@v3
@@ -41,7 +43,8 @@ jobs:
           qmake RasFocus.pro
           make -j2
           make install INSTALL_ROOT=android-build
-          androiddeployqt --input android-RasFocusApp-deployment-settings.json --output android-build --gradle
+          # এখানে নির্দিষ্ট করে android-31 টার্গেট করে দেওয়া হলো
+          androiddeployqt --input android-RasFocusApp-deployment-settings.json --output android-build --gradle --android-platform android-31
 
       - name: 📥 Upload APK for Rasel
         uses: actions/upload-artifact@v4
