@@ -1,0 +1,39 @@
+name: Build C++ Qt App
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.5.3'
+          arch: 'win64_mingw'
+
+      - name: Build Preparation
+        run: mkdir build
+
+      - name: Compile C++ Code
+        working-directory: ./build
+        run: |
+          qmake ../BlockerX.pro
+          mingw32-make
+
+      - name: Deploy Windows Dependencies
+        working-directory: ./build/release
+        # এটি Qt এর .dll ফাইলগুলো exe এর সাথে যুক্ত করবে
+        run: windeployqt BlockerX.exe
+
+      - name: Upload EXE File
+        uses: actions/upload-artifact@v4
+        with:
+          name: RasBlocker-Pro-Windows
+          path: build/release/*
