@@ -1,1 +1,6 @@
-
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/">
+    <file>icon.png</file>
+    <file>splash.png</file>
+</qresource>
+</RCC>
