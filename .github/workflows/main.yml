@@ -1,16 +1,36 @@
-name: Android Build
+name: Build Android APK
+
 on: [push]
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v2
-      - name: Install Qt
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Java JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+
+      - name: Install Qt for Android
         uses: jurplel/install-qt-action@v3
         with:
           version: '5.15.2'
           target: 'android'
-      - name: Build APK
+
+      - name: Build C++ Code and Package APK
         run: |
           qmake RasFocus.pro
-          make
+          make -j2
+          make install INSTALL_ROOT=android-build
+          androiddeployqt --input android-libRasFocusApp.so-deployment-settings.json --output android-build --gradle
+
+      - name: 📥 Upload APK for Rasel
+        uses: actions/upload-artifact@v3
+        with:
+          name: RasFocus-App-APK
+          path: android-build/build/outputs/apk/debug/*.apk
