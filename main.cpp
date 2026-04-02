@@ -3,281 +3,244 @@
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QGridLayout>
 #include <QLabel>
 #include <QPushButton>
-#include <QListWidget>
-#include <QLineEdit>
-#include <QComboBox>
-#include <QRadioButton>
-#include <QButtonGroup>
-#include <QSpinBox>
+#include <QFrame>
+#include <QGraphicsDropShadowEffect>
+#include <QScrollArea>
 #include <QTimer>
-#include <QSystemTrayIcon>
-#include <QMenu>
 #include <QMessageBox>
-#include <QProcess>
-#include <QDir>
-#include <QFile>
-#include <QTextStream>
-#include <QDesktopServices>
-#include <QUrl>
-#include <QScreen>
-#include <QFontDatabase>
-#include <QCloseEvent>
 
-// ==========================================
-// OS SPECIFIC INCLUDES
-// ==========================================
+// --- OS Specific Headers ---
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <tlhelp32.h>
 #endif
 
+#ifdef Q_OS_ANDROID
+#include <QtAndroidExtras/QAndroidJniObject>
+#endif
+
 // ==========================================
-// DATA STRUCTURES
+// গ্লোবাল ভ্যারিয়েবল ও ডাটা
 // ==========================================
-QStringList blockedApps, blockedWebs, allowedApps, allowedWebs;
-
-QStringList systemApps = {
-    "explorer.exe", "svchost.exe", "taskmgr.exe", "cmd.exe", "conhost.exe", "csrss.exe", "dwm.exe"
-};
-
-QStringList hiddenUIProcesses = {
-    "svchost.exe", "smss.exe", "csrss.exe", "services.exe", "lsass.exe", "wininit.exe"
-};
-
-QStringList explicitKeywords = {"porn", "xxx", "sex", "nude", "nsfw", "adult video", "pornhub", "xvideos", "bangla choti"};
-QStringList defaultAdultWebs = {"pornhub", "xvideos", "xnxx", "xhamster", "brazzers", "redtube"};
-
-QStringList defaultSystemBlocks = {"regedit.exe", "mmc.exe", "systemsettings.exe", "control.exe", "gpedit.msc"};
-QStringList defaultSystemTitles = {"control panel", "registry editor", "local group policy editor", "settings"};
-
-QStringList islamicQuotes = {
-    "\"মুমিনদের বলুন, তারা যেন তাদের দৃষ্টি নত রাখে এবং তাদের যৌনাঙ্গর হেফাযত করে।\" - (সূরা আন-নূর: ৩০)",
-    "\"লজ্জাশীলতা কল্যাণ ছাড়া আর কিছুই বয়ে আনে না।\" - (সহীহ বুখারী)"
-};
-
-QStringList timeQuotes = {
-    "\"যারা সময়কে মূল্যায়ন করে না, সময়ও তাদেরকে মূল্যায়ন করে না।\" - এ.পি.জে. আবদুল কালাম",
-    "\"আজকের দিনটি নষ্ট করার অর্থ হলো ভবিষ্যতের একটি উজ্জ্বল দিন চুরি করা।\""
-};
-
 bool isSessionActive = false;
-bool isTimeMode = false;
-bool isPassMode = false;
-bool useAllowMode = false; 
-bool isOverlayVisible = false;
+int focusSeconds = 0;
 
-QString currentSessionPass = "";
-int focusTimeTotalSeconds = 0;
-int timerTicks = 0;
+QStringList explicitKeywords = {"porn", "xxx", "sex", "nude", "adult video", "pornhub", "xvideos"};
+QStringList blockedApps = {"facebook.exe", "chrome.exe", "msedge.exe"}; // পিসির জন্য ডেমো
 
 // ==========================================
-// CROSS-PLATFORM UTILITY FUNCTIONS
+// ১. ড্যাশবোর্ড কার্ড (UI Component)
 // ==========================================
-bool CheckAdminOrPermissions() {
-#ifdef Q_OS_WIN
-    BOOL isAdmin = FALSE;
-    PSID adminGroup = NULL;
-    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
-    if (AllocateAndInitializeSid(&ntAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &adminGroup)) {
-        CheckTokenMembership(NULL, adminGroup, &isAdmin);
-        FreeSid(adminGroup);
-    }
-    return isAdmin;
-#elif defined(Q_OS_ANDROID)
-    // Android e by default normal permission thake, OS level perm pore Java diye nite hobe
-    return true; 
-#endif
-}
-
-QString CleanURL(QString s) {
-    s = s.toLower();
-    QStringList to_erase = {"https://", "http://", "www.", "/*"};
-    for (const QString& prefix : to_erase) s.replace(prefix, "");
-    if(s.endsWith("/")) s.chop(1);
-    
-    QStringList domains = {".com", ".org", ".net", ".io", ".co", ".bd"};
-    for (const QString& dom : domains) {
-        int pos = s.indexOf(dom);
-        if (pos != -1) s = s.left(pos);
-    }
-    return s; 
-}
-
-QStringList GetActiveProcesses() {
-    QStringList processes;
-#ifdef Q_OS_WIN
-    HANDLE h = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    PROCESSENTRY32W pe = {sizeof(pe)}; 
-    if (Process32FirstW(h, &pe)) {
-        do { processes.append(QString::fromWCharArray(pe.szExeFile)); } while (Process32NextW(h, &pe));
-    }
-    CloseHandle(h);
-#elif defined(Q_OS_ANDROID)
-    // Android process fetching placeholder
-    processes.append("com.android.chrome");
-    processes.append("com.facebook.katana");
-#endif
-    processes.removeDuplicates();
-    processes.sort(Qt::CaseInsensitive);
-    return processes;
-}
-
-void SaveDataList(const QString& filename, const QStringList& vec) {
-    QFile file(filename);
-    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QTextStream out(&file);
-        for (const QString& item : vec) out << item << "\n";
-        file.close();
-    }
-}
-
-// ==========================================
-// MAIN UI CLASS
-// ==========================================
-class OverlayWindow : public QWidget {
+class InfoCard : public QFrame {
+    QLabel *lblValue;
 public:
-    QLabel* textLabel;
-    QTimer* hideTimer;
+    InfoCard(QString iconStr, QString title, QString value, QString stat, QWidget *parent = nullptr) : QFrame(parent) {
+        setStyleSheet(R"(
+            QFrame { background-color: white; border-radius: 15px; padding: 15px; border: 1px solid #e0e6ed; }
+            QLabel#ValueLabel { font-size: 20px; font-weight: bold; color: #1a1d21; border: none; }
+            QLabel#TitleLabel { font-size: 14px; color: #7f8c8d; border: none; }
+            QLabel#StatLabel  { font-size: 12px; color: #2ecc71; font-weight: bold; border: none; }
+            QLabel#IconLabel  { font-size: 24px; border: none; }
+        )");
 
-    OverlayWindow(QWidget *parent = nullptr) : QWidget(parent) {
-        setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
-        setAttribute(Qt::WA_TranslucentBackground);
+        QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);
+        shadow->setBlurRadius(15); shadow->setColor(QColor(0, 0, 0, 30)); shadow->setOffset(0, 5);
+        setGraphicsEffect(shadow);
+
+        QVBoxLayout *layout = new QVBoxLayout(this); layout->setSpacing(5);
         
-        resize(350, 200); // Mobile er jonno ektu choto kora holo
-        QVBoxLayout* layout = new QVBoxLayout(this);
-        textLabel = new QLabel(this);
-        textLabel->setAlignment(Qt::AlignCenter);
-        textLabel->setWordWrap(true);
-        textLabel->setFont(QFont("Segoe UI", 16, QFont::Bold));
-        layout->addWidget(textLabel);
+        QLabel *lblIcon = new QLabel(iconStr); lblIcon->setObjectName("IconLabel"); layout->addWidget(lblIcon);
+        layout->addStretch();
         
-        hideTimer = new QTimer(this);
-        connect(hideTimer, &QTimer::timeout, this, &OverlayWindow::hideOverlay);
+        QLabel *lblTitle = new QLabel(title); lblTitle->setObjectName("TitleLabel"); layout->addWidget(lblTitle);
+        
+        lblValue = new QLabel(value); lblValue->setObjectName("ValueLabel"); layout->addWidget(lblValue);
+        
+        QLabel *lblStat = new QLabel(stat); lblStat->setObjectName("StatLabel"); layout->addWidget(lblStat);
     }
 
-    void showMessage(int type) {
-        QString quote = (type == 1) ? islamicQuotes[rand() % islamicQuotes.size()] : timeQuotes[rand() % timeQuotes.size()];
-        if(type == 1) setStyleSheet("QWidget { background-color: #093d1f; border: 4px solid #f1c40f; border-radius: 10px; } QLabel { color: #ffffff; border: none; }");
-        else setStyleSheet("QWidget { background-color: #1a252f; border: 4px solid #3498db; border-radius: 10px; } QLabel { color: #ffffff; border: none; }");
-        
-        textLabel->setText(quote);
-        QScreen *screen = QGuiApplication::primaryScreen();
-        QRect screenGeometry = screen->geometry();
-        move((screenGeometry.width() - width()) / 2, (screenGeometry.height() - height()) / 2);
-
-        isOverlayVisible = true; show(); hideTimer->start(6000); 
+    // ভ্যালু আপডেট করার ফাংশন (টাইমার থেকে কল হবে)
+    void updateValue(QString newValue) {
+        lblValue->setText(newValue);
     }
-    void hideOverlay() { hide(); hideTimer->stop(); isOverlayVisible = false; }
 };
 
-class FocusApp : public QMainWindow {
+// ==========================================
+// ২. ব্যানার কার্ড (UI Component)
+// ==========================================
+class BannerCard : public QFrame {
 public:
-    OverlayWindow* overlay;
-    QTimer* coreTimer;
-    
-    QLineEdit* passEdit; QSpinBox* hrSpin; QSpinBox* minSpin;
-    QPushButton* btnStart; QPushButton* btnStop; QLabel* lblTimeLeft;
-    QRadioButton* rbBlock; QRadioButton* rbAllow;
-    
-    QListWidget* listBlockApps; QComboBox* inputBlockWeb;
+    BannerCard(QString color, QString iconStr, QString title, QString desc, QWidget *parent = nullptr) : QFrame(parent) {
+        setStyleSheet(QString(R"(
+            QFrame { background-color: %1; border-radius: 15px; padding: 20px; }
+            QLabel#TitleLabel { font-size: 18px; font-weight: bold; color: #2c3e50; border: none; }
+            QLabel#DescLabel  { font-size: 14px; color: #34495e; border: none; }
+            QLabel#IconLabel  { font-size: 28px; border: none; }
+        )").arg(color));
 
+        QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);
+        shadow->setBlurRadius(10); shadow->setColor(QColor(0, 0, 0, 20)); shadow->setOffset(0, 4);
+        setGraphicsEffect(shadow);
+
+        QHBoxLayout *mainLayout = new QHBoxLayout(this); mainLayout->setSpacing(15);
+        QLabel *lblIcon = new QLabel(iconStr); lblIcon->setObjectName("IconLabel"); mainLayout->addWidget(lblIcon, 0, Qt::AlignTop);
+
+        QVBoxLayout* textLayout = new QVBoxLayout(); textLayout->setSpacing(5);
+        QLabel *lblTitle = new QLabel(title); lblTitle->setObjectName("TitleLabel"); textLayout->addWidget(lblTitle);
+        QLabel *lblDesc = new QLabel(desc); lblDesc->setObjectName("DescLabel"); lblDesc->setWordWrap(true); textLayout->addWidget(lblDesc);
+
+        mainLayout->addLayout(textLayout, 1);
+    }
+};
+
+// ==========================================
+// ৩. MAIN APPLICATION (লজিক + UI)
+// ==========================================
+class FocusApp : public QMainWindow {
+    QTimer *coreTimer;
+    InfoCard *cardScreenTime;
+    QPushButton *btnToggleFocus;
+
+public:
     FocusApp() {
-        setWindowTitle("RasFocus - Pro");
-        resize(800, 600);
-        
-        QWidget* centralWidget = new QWidget(this);
-        setCentralWidget(centralWidget);
-        QVBoxLayout* mainLayout = new QVBoxLayout(centralWidget);
+        setWindowTitle("RasFocus+ Pro");
+        resize(380, 750); 
 
-        // UI Setup (Simplified for cross platform view)
-        QHBoxLayout* topLayout = new QHBoxLayout();
-        passEdit = new QLineEdit(); passEdit->setPlaceholderText("Password");
-        hrSpin = new QSpinBox(); hrSpin->setRange(0, 24);
-        minSpin = new QSpinBox(); minSpin->setRange(0, 59);
-        btnStart = new QPushButton("START");
-        btnStop = new QPushButton("STOP");
-        lblTimeLeft = new QLabel("00:00:00");
-        
-        topLayout->addWidget(passEdit); topLayout->addWidget(hrSpin); topLayout->addWidget(minSpin);
-        topLayout->addWidget(btnStart); topLayout->addWidget(btnStop); topLayout->addWidget(lblTimeLeft);
-        mainLayout->addLayout(topLayout);
+        setStyleSheet(R"(
+            QMainWindow { background-color: white; }
+            QLabel { font-family: 'Segoe UI', Arial, sans-serif; }
+            QPushButton { font-family: 'Segoe UI', Arial, sans-serif; border-radius: 10px; font-weight: bold;}
+            QScrollArea { border: none; background-color: transparent; }
+            QWidget#MainContent { background-color: transparent; }
+        )");
 
-        listBlockApps = new QListWidget();
-        mainLayout->addWidget(new QLabel("Blocked Items:"));
-        mainLayout->addWidget(listBlockApps);
+        QScrollArea *scrollArea = new QScrollArea(this);
+        scrollArea->setWidgetResizable(true);
+        setCentralWidget(scrollArea);
 
-        overlay = new OverlayWindow();
+        QWidget* mainContent = new QWidget();
+        mainContent->setObjectName("MainContent");
+        scrollArea->setWidget(mainContent);
 
-        connect(btnStart, &QPushButton::clicked, this, &FocusApp::startFocus);
-        connect(btnStop, &QPushButton::clicked, this, &FocusApp::stopFocus);
+        QVBoxLayout* mainLayout = new QVBoxLayout(mainContent);
+        mainLayout->setContentsMargins(15, 0, 15, 15);
+        mainLayout->setSpacing(15);
 
+        // --- হেডার ---
+        QWidget* headerArea = new QWidget();
+        headerArea->setFixedHeight(160);
+        headerArea->setStyleSheet("QWidget { background: QLinearGradient(x1:0, y1:0, x2:1, y2:1, stop:0 #6c5ce7, stop:1 #81ecec); border-bottom-left-radius: 25px; border-bottom-right-radius: 25px; }");
+        QVBoxLayout* headerLayout = new QVBoxLayout(headerArea);
+        mainLayout->addWidget(headerArea);
+
+        // --- ওয়েলকাম এরিয়া ---
+        QVBoxLayout* welcomeLayout = new QVBoxLayout(); welcomeLayout->setSpacing(0);
+        QLabel* lblGreeting = new QLabel("Good Morning, Rasel!"); lblGreeting->setStyleSheet("font-size: 22px; font-weight: bold; color: #1a1d21; border: none;");
+        welcomeLayout->addWidget(lblGreeting);
+        mainLayout->addLayout(welcomeLayout);
+
+        // --- এনালাইটিক্স কার্ড ---
+        QHBoxLayout* cardLayout = new QHBoxLayout(); cardLayout->setSpacing(10);
+        cardScreenTime = new InfoCard("⏰", "Screen Time", "0 mins 0 sec", "Today", this);
+        InfoCard* cardAppLaunches = new InfoCard("🚀", "App Launches", "12", "Tracked", this);
+        cardLayout->addWidget(cardScreenTime); cardLayout->addWidget(cardAppLaunches);
+        mainLayout->addLayout(cardLayout);
+
+        // --- ব্যানার কার্ড ---
+        mainLayout->addWidget(new BannerCard("#e8daef", "☕", "Take a Break", "Focus on things that really matter.", this));
+
+        // --- START/STOP BUTTON ---
+        btnToggleFocus = new QPushButton("Start Protection");
+        btnToggleFocus->setMinimumHeight(55);
+        btnToggleFocus->setStyleSheet("background-color: #2ecc71; color: white; font-size: 18px;");
+        connect(btnToggleFocus, &QPushButton::clicked, this, &FocusApp::toggleFocus);
+        mainLayout->addWidget(btnToggleFocus);
+
+        mainLayout->addStretch();
+
+        // --- কোর ব্লকিং টাইমার ---
         coreTimer = new QTimer(this);
         connect(coreTimer, &QTimer::timeout, this, &FocusApp::coreLoop);
-        coreTimer->start(1000);
     }
 
-    void startFocus() {
+    void toggleFocus() {
         if (!isSessionActive) {
-            focusTimeTotalSeconds = (hrSpin->value() * 3600) + (minSpin->value() * 60);
-            if(focusTimeTotalSeconds > 0) { isTimeMode = true; timerTicks = 0; }
             isSessionActive = true;
-            QMessageBox::information(this, "Started", "RasFocus is now active!");
+            btnToggleFocus->setText("Stop Protection");
+            btnToggleFocus->setStyleSheet("background-color: #e74c3c; color: white; font-size: 18px;");
+            coreTimer->start(1000); // প্রতি ১ সেকেন্ডে চেক করবে
+            QMessageBox::information(this, "Started", "RasFocus Protection is ON!");
+        } else {
+            isSessionActive = false;
+            btnToggleFocus->setText("Start Protection");
+            btnToggleFocus->setStyleSheet("background-color: #2ecc71; color: white; font-size: 18px;");
+            coreTimer->stop();
         }
     }
 
-    void stopFocus() {
-        isSessionActive = false;
-        QMessageBox::information(this, "Stopped", "RasFocus disabled.");
-    }
-
+    // ==========================================
+    // কোর ব্লকিং লজিক (উইন্ডোজ এবং অ্যান্ড্রয়েড)
+    // ==========================================
     void coreLoop() {
         if (!isSessionActive) return;
 
-        if (isTimeMode && focusTimeTotalSeconds > 0) {
-            timerTicks++;
-            int timeLeft = focusTimeTotalSeconds - timerTicks;
-            if (timeLeft <= 0) {
-                isSessionActive = false; isTimeMode = false; lblTimeLeft->setText("00:00:00");
-                QMessageBox::information(this, "Success", "Time is up!");
-                return;
-            }
-            int h = timeLeft / 3600; int m = (timeLeft % 3600) / 60; int s = timeLeft % 60;
-            lblTimeLeft->setText(QString("%1:%2:%3").arg(h, 2, 10, QChar('0')).arg(m, 2, 10, QChar('0')).arg(s, 2, 10, QChar('0')));
-        }
+        // UI আপডেট (স্ক্রিন টাইম বাড়ানো)
+        focusSeconds++;
+        int m = focusSeconds / 60;
+        int s = focusSeconds % 60;
+        cardScreenTime->updateValue(QString("%1 mins %2 sec").arg(m).arg(s));
 
+        // --- উইন্ডোজ পিসির ব্লকিং লজিক ---
 #ifdef Q_OS_WIN
-        // WINDOWS ONLY LOGIC (Task killing)
-        HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0); PROCESSENTRY32W pe = {sizeof(pe)};
+        HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0); 
+        PROCESSENTRY32W pe = {sizeof(pe)};
         if (Process32FirstW(hSnap, &pe)) {
             do {
                 QString n = QString::fromWCharArray(pe.szExeFile).toLower();
-                if (n == "taskmgr.exe") {
+                
+                // যদি অ্যাপটি ব্লকলিস্টে থাকে, তাহলে কিল করবে
+                if (blockedApps.contains(n, Qt::CaseInsensitive)) {
                     HANDLE ph = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
                     if(ph) { TerminateProcess(ph, 1); CloseHandle(ph); }
                 }
             } while (Process32NextW(hSnap, &pe));
         }
         CloseHandle(hSnap);
-#elif defined(Q_OS_ANDROID)
-        // ANDROID ONLY LOGIC (Placeholder for JNI calls)
-        // Ekhane amra pore Android API call korbo
+
+        // --- ব্রাউজারের উইন্ডো টাইটেল চেক (অ্যাডাল্ট ব্লক) ---
+        HWND hActive = GetForegroundWindow();
+        if (hActive) {
+            WCHAR title[512];
+            if (GetWindowTextW(hActive, title, 512) > 0) {
+                QString sTitle = QString::fromWCharArray(title).toLower();
+                for (const QString& keyword : explicitKeywords) {
+                    if (sTitle.contains(keyword)) { 
+                        ShowWindow(hActive, SW_MINIMIZE); // মিনিমাইজ করে দেবে
+                        break;
+                    }
+                }
+            }
+        }
+#endif
+
+        // --- অ্যান্ড্রয়েডের ব্লকিং লজিক (JNI Call) ---
+#ifdef Q_OS_ANDROID
+        /* অ্যান্ড্রয়েডে C++ সরাসরি অ্যাপ ব্লক করতে পারে না। 
+           তাই আমরা Java এর একটি ফাংশন কল করছি। 
+           এই ফাংশনটি আমাদের পরে Java ফাইলে লিখতে হবে।
+        */
+        QAndroidJniObject::callStaticMethod<void>(
+            "com/rasel/rasfocus/BlockerService", // Java ক্লাসের নাম
+            "checkAndBlock",                     // Java ফাংশনের নাম
+            "()V"
+        );
 #endif
     }
 };
 
 int main(int argc, char *argv[]) {
-    if (!CheckAdminOrPermissions()) {
-#ifdef Q_OS_WIN
-        WCHAR path[MAX_PATH]; GetModuleFileNameW(NULL, path, MAX_PATH);
-        SHELLEXECUTEINFOW sei = { 0 }; sei.cbSize = sizeof(sei); sei.lpVerb = L"runas"; sei.lpFile = path; sei.nShow = SW_NORMAL;
-        ShellExecuteExW(&sei);
-        return 0; 
-#endif
-    }
-
     QApplication app(argc, argv);
     FocusApp window;
     window.show();
