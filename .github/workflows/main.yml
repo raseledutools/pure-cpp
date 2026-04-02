@@ -1,4 +1,4 @@
-name: RasFocus Windows Build
+name: RasFocus Android APK Build
 
 on:
   push:
@@ -6,38 +6,35 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: windows-latest
+  build-android:
+    runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
+    - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Install Qt
+    - name: Setup Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '11'
+
+    - name: Install Qt for Android
       uses: jurplel/install-qt-action@v3
       with:
         version: '5.15.2'
-        host: 'windows'
-        target: 'desktop'
-        arch: 'win64_msvc2019_64'
+        target: 'android'
+        arch: 'android_armv7'
 
-    # এই স্টেপটি নতুন অ্যাড করা হয়েছে (MSVC কম্পাইলার রেডি করার জন্য)
-    - name: Setup MSVC Developer Command Prompt
-      uses: ilammy/msvc-dev-cmd@v1
-
-    - name: Build RasFocus
+    - name: Build APK
       run: |
         qmake RasFocus.pro
-        nmake release
+        make
+        make install INSTALL_ROOT=android-build
+        androiddeployqt --output android-build --verbose --input android-libRasFocusApp.so-deployment-settings.json --gradle
 
-    - name: Package Dependencies (windeployqt)
-      run: |
-        mkdir dist
-        copy release\RasFocus+AdultBlocker.exe dist\
-        windeployqt dist\RasFocus+AdultBlocker.exe
-
-    - name: Upload Finished Project
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: RasFocus-Release-Pack
-        path: dist/
+        name: RasFocus-Android-APK
+        path: android-build/build/outputs/apk/debug/*.apk
