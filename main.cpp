@@ -1,344 +1,691 @@
-// main.cpp
 #include <QApplication>
 #include <QMainWindow>
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QStackedWidget>
+#include <QGridLayout>
 #include <QLabel>
 #include <QPushButton>
-#include <QTableWidget>
-#include <QTableWidgetItem>
-#include <QHeaderView>
-#include <QProgressBar>
-#include <QMessageBox>
-#include <QDialog>
+#include <QListWidget>
 #include <QLineEdit>
 #include <QComboBox>
 #include <QRadioButton>
 #include <QButtonGroup>
-#include <QCheckBox>
 #include <QSpinBox>
-#include <QGroupBox>
 #include <QTimer>
-#include <QDateTime>
-#include <QProcess>
-#include <QSettings>
-#include <QFile>
-#include <QTextStream>
-#include <QDir>
-#include <QThread>
-#include <QKeyEvent>
-#include <QScreen>
-#include <QGuiApplication>
-#include <QCursor>
-#include <QPalette>
-#include <QStyle>
-#include <QFont>
-#include <QScrollArea>
-#include <QInputDialog>
 #include <QSystemTrayIcon>
 #include <QMenu>
-#include <QAction>
-#include <QCloseEvent>
+#include <QMessageBox>
+#include <QProcess>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QScreen>
+#include <QFontDatabase>
 
-#ifdef Q_OS_WIN
+// Windows API for Core System Logic
 #include <windows.h>
-#endif
+#include <tlhelp32.h>
+#include <algorithm>
 
-// ====================== Keyboard Monitor ======================
-class KeyboardMonitor : public QObject {
-    Q_OBJECT
-public:
-    static KeyboardMonitor* instance();
-    void startMonitoring();
-    void stopMonitoring();
-    bool isMonitoring() const { return m_monitoring; }
-signals:
-    void forbiddenWordTyped(const QString& word);
-private:
-    explicit KeyboardMonitor(QObject* parent = nullptr);
-    static KeyboardMonitor* s_instance;
-    bool m_monitoring = false;
-#ifdef Q_OS_WIN
-    HHOOK m_keyboardHook = nullptr;
-    static LRESULT CALLBACK keyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
-#endif
+using namespace std;
+
+// ==========================================
+// DATA STRUCTURES & LOGIC VARIABLES
+// ==========================================
+vector<string> blockedApps, blockedWebs, allowedApps, allowedWebs;
+
+vector<string> systemApps = {
+    "explorer.exe", "svchost.exe", "taskmgr.exe", "cmd.exe", "conhost.exe", "csrss.exe", "dwm.exe", 
+    "lsass.exe", "services.exe", "smss.exe", "wininit.exe", "winlogon.exe", "spoolsv.exe", 
+    "fontdrvhost.exe", "searchui.exe", "searchindexer.exe", "sihost.exe", "taskhostw.exe", 
+    "ctfmon.exe", "applicationframehost.exe", "system", "registry", "audiodg.exe",
+    "searchapp.exe", "startmenuexperiencehost.exe", "shellexperiencehost.exe", "textinputhost.exe",
+    "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe"
 };
 
-KeyboardMonitor* KeyboardMonitor::s_instance = nullptr;
+vector<string> hiddenUIProcesses = {
+    "svchost.exe", "smss.exe", "csrss.exe", "services.exe", "lsass.exe", "wininit.exe", 
+    "winlogon.exe", "fontdrvhost.exe", "dwm.exe", "spoolsv.exe", "taskhostw.exe", 
+    "conhost.exe", "system", "registry", "dllhost.exe", "wmiprvse.exe", "taskmgr.exe"
+};
 
-KeyboardMonitor* KeyboardMonitor::instance() {
-    if (!s_instance) s_instance = new KeyboardMonitor();
-    return s_instance;
-}
+vector<string> explicitKeywords = {
+    "porn", "xxx", "sex", "nude", "nsfw", "adult video", "xvideos", "pornhub", 
+    "xnxx", "xhamster", "brazzers", "onlyfans", "playboy", "naughty america", 
+    "mia khalifa", "dani daniels", "johnny sins", "hot desi", "bhabi", "chudai", 
+    "bangla choti", "magi", "sexy"
+};
 
-KeyboardMonitor::KeyboardMonitor(QObject* parent) : QObject(parent) { s_instance = this; }
+vector<string> defaultAdultWebs = {
+    "pornhub", "xvideos", "xnxx", "xhamster", "brazzers", "redtube", 
+    "youporn", "tube8", "spankbang", "eporner", "beeg", "xmovies8"
+};
 
-void KeyboardMonitor::startMonitoring() {
-    if (m_monitoring) return;
-#ifdef Q_OS_WIN
-    m_keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboardProc, GetModuleHandle(NULL), 0);
-    if (m_keyboardHook) m_monitoring = true;
-#endif
-}
+vector<string> defaultSystemBlocks = {"regedit.exe", "mmc.exe", "systemsettings.exe", "control.exe", "gpedit.msc"};
+vector<string> defaultSystemTitles = {"control panel", "registry editor", "local group policy editor", "settings"};
 
-void KeyboardMonitor::stopMonitoring() {
-#ifdef Q_OS_WIN
-    if (m_keyboardHook) {
-        UnhookWindowsHookEx(m_keyboardHook);
-        m_keyboardHook = nullptr;
+vector<QString> islamicQuotes = {
+    "\"মুমিনদের বলুন, তারা যেন তাদের দৃষ্টি নত রাখে এবং তাদের যৌনাঙ্গর হেফাযত করে।\" - (সূরা আন-নূর: ৩০)",
+    "\"লজ্জাশীলতা কল্যাণ ছাড়া আর কিছুই বয়ে আনে না।\" - (সহীহ বুখারী)",
+    "\"আর তোমরা ব্যভিচারের কাছেও যেয়ো না। নিশ্চয়ই এটা অশ্লীল কাজ এবং মন্দ পথ।\" - (সূরা আল-ইসরা: ৩২)",
+    "\"প্রতিটি ধর্মের একটি নিজস্ব স্বভাব রয়েছে, আর ইসলামের স্বভাব হলো লজ্জাশীলতা।\" - (ইবনে মাজাহ)",
+    "\"আল্লাহ সবকিছু দেখছেন। নিজের চোখ ও মনকে পবিত্র রাখো।\""
+};
+
+vector<QString> timeQuotes = {
+    "\"যারা সময়কে মূল্যায়ন করে না, সময়ও তাদেরকে মূল্যায়ন করে না।\" - এ.পি.জে. আবদুল কালাম",
+    "\"আজকের দিনটি নষ্ট করার অর্থ হলো ভবিষ্যতের একটি উজ্জ্বল দিন চুরি করা।\"",
+    "\"বড় কিছু অর্জন করতে হলে ছোট ছোট বিভ্রান্তিগুলোকে 'না' বলতে শিখতে হবে।\"",
+    "\"সময় ও স্রোত কারও জন্য অপেক্ষা করে না। তোমার লক্ষ্যকে প্রাধান্য দাও।\""
+};
+
+bool isSessionActive = false;
+bool isTimeMode = false;
+bool isPassMode = false;
+bool useAllowMode = false; 
+bool isOverlayVisible = false;
+
+QString currentSessionPass = "";
+int focusTimeTotalSeconds = 0;
+int timerTicks = 0;
+
+// ==========================================
+// UTILITY FUNCTIONS (Win32 & Standard C++)
+// ==========================================
+bool IsRunAsAdmin() {
+    BOOL isAdmin = FALSE;
+    PSID adminGroup = NULL;
+    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
+    if (AllocateAndInitializeSid(&ntAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &adminGroup)) {
+        CheckTokenMembership(NULL, adminGroup, &isAdmin);
+        FreeSid(adminGroup);
     }
-#endif
-    m_monitoring = false;
+    return isAdmin;
 }
 
-#ifdef Q_OS_WIN
-LRESULT CALLBACK KeyboardMonitor::keyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode >= 0 && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
-        KBDLLHOOKSTRUCT* p = (KBDLLHOOKSTRUCT*)lParam;
-        static QString currentWord;
-        if (p->vkCode >= 'A' && p->vkCode <= 'Z') {
-            // FIX: Explicitly cast DWORD to uint to resolve ambiguity
-            currentWord.append(QChar(static_cast<uint>(p->vkCode)));
-            QString wordLower = currentWord.toLower();
-            QStringList forbidden = {"porn", "xxx", "adult", "sex", "nude", "erotic"};
-            for (const QString& f : forbidden) {
-                if (wordLower.contains(f)) {
-                    emit KeyboardMonitor::instance()->forbiddenWordTyped(f);
-                    currentWord.clear();
-                    break;
+string CleanURL(string url) {
+    string s = url;
+    transform(s.begin(), s.end(), s.begin(), ::tolower);
+    string to_erase[] = {"https://", "http://", "www.", "/*"};
+    for (const string& prefix : to_erase) {
+        size_t pos = s.find(prefix);
+        if (pos != string::npos) s.erase(pos, prefix.length());
+    }
+    if(!s.empty() && s.back() == '/') s.pop_back(); 
+    string domains[] = {".com", ".org", ".net", ".io", ".co", ".bd"};
+    for (const string& dom : domains) {
+        size_t pos = s.find(dom);
+        if (pos != string::npos) s = s.substr(0, pos);
+    }
+    return s; 
+}
+
+void CloseActiveTabAndMinimize(HWND hBrowser) {
+    keybd_event(VK_CONTROL, 0, 0, 0); keybd_event('W', 0, 0, 0);              
+    keybd_event('W', 0, KEYEVENTF_KEYUP, 0); keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0); 
+    Sleep(50); 
+    ShowWindow(hBrowser, SW_MINIMIZE);
+}
+
+void LoadDataList(const QString& filename, vector<string>& vec, QListWidget* listWidget) {
+    QFile file(filename);
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&file);
+        while (!in.atEnd()) {
+            QString line = in.readLine().trimmed();
+            if (!line.isEmpty()) {
+                vec.push_back(line.toStdString());
+                listWidget->addItem(line);
+            }
+        }
+        file.close();
+    }
+}
+
+void SaveDataList(const QString& filename, const vector<string>& vec) {
+    QFile file(filename);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&file);
+        for (const auto& item : vec) out << QString::fromStdString(item) << "\n";
+        file.close();
+    }
+}
+
+void ShowAllowedWebsitesPage() {
+    static DWORD lastTime = 0; 
+    if (GetTickCount() - lastTime < 3000) return; 
+    lastTime = GetTickCount();
+
+    QString htmlPath = QDir::currentPath() + "/allowed_sites.html";
+    QFile file(htmlPath);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream html(&file);
+        html << "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Allowed Websites</title>";
+        html << "<style>body{font-family: 'Segoe UI', sans-serif; background-color: #f4f6f9; color: #212529; text-align: center; padding-top: 80px;}";
+        html << "a {background: #007bff; color: white; text-decoration: none; font-size: 18px; padding: 12px 25px; margin: 10px; display: inline-block; border-radius: 50px; transition: all 0.3s;} a:hover {background: #0056b3; transform: scale(1.05);}";
+        html << ".container {background: #ffffff; padding: 50px; border-radius: 20px; display: inline-block; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 60%;}</style></head><body>";
+        html << "<div class='container'><h2 style='color: #28a745;'>Focus Mode is Active!</h2><p style='font-size: 18px; color: #6c757d; margin-bottom: 30px;'>Access granted only to approved websites:</p>";
+        
+        if (allowedWebs.empty()) { html << "<p style='color:#dc3545;'>Your Allow List is empty!</p>"; } 
+        else {
+            for (const auto& web : allowedWebs) {
+                string cleanWeb = web; size_t starPos = cleanWeb.find("/*");
+                if (starPos != string::npos) cleanWeb = cleanWeb.substr(0, starPos);
+                html << "<a href='https://" << QString::fromStdString(cleanWeb) << "' target='_blank'>" << QString::fromStdString(cleanWeb) << "</a>";
+            }
+        }
+        html << "</div></body></html>";
+        file.close();
+    }
+    QDesktopServices::openUrl(QUrl::fromLocalFile(htmlPath));
+}
+
+// ==========================================
+// OVERLAY WINDOW CLASS (BEAUTIFUL POPUP)
+// ==========================================
+class OverlayWindow : public QWidget {
+public:
+    QLabel* textLabel;
+    QTimer* hideTimer;
+
+    OverlayWindow(QWidget *parent = nullptr) : QWidget(parent) {
+        setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
+        setAttribute(Qt::WA_TranslucentBackground);
+        
+        // Window Size
+        resize(700, 200);
+        
+        // Layout
+        QVBoxLayout* layout = new QVBoxLayout(this);
+        textLabel = new QLabel(this);
+        textLabel->setAlignment(Qt::AlignCenter);
+        textLabel->setWordWrap(true);
+        textLabel->setFont(QFont("Segoe UI", 18, QFont::Bold));
+        layout->addWidget(textLabel);
+        
+        hideTimer = new QTimer(this);
+        connect(hideTimer, &QTimer::timeout, this, &OverlayWindow::hideOverlay);
+    }
+
+    void showMessage(int type) {
+        QString quote;
+        if (type == 1) {
+            // Adult Mode: Islamic Green & Gold
+            quote = islamicQuotes[rand() % islamicQuotes.size()];
+            setStyleSheet("QWidget { background-color: #093d1f; border: 6px solid #f1c40f; border-radius: 15px; } QLabel { color: #ffffff; border: none; }");
+        } else {
+            // Focus Mode: Professional Blue & Cyan
+            quote = timeQuotes[rand() % timeQuotes.size()];
+            setStyleSheet("QWidget { background-color: #1a252f; border: 6px solid #3498db; border-radius: 15px; } QLabel { color: #ffffff; border: none; }");
+        }
+        
+        textLabel->setText(quote);
+        
+        // Center on Screen
+        QScreen *screen = QGuiApplication::primaryScreen();
+        QRect screenGeometry = screen->geometry();
+        int x = (screenGeometry.width() - width()) / 2;
+        int y = (screenGeometry.height() - height()) / 2;
+        move(x, y);
+
+        isOverlayVisible = true;
+        show();
+        hideTimer->start(8000); // 8 Seconds
+    }
+
+    void hideOverlay() {
+        hide();
+        hideTimer->stop();
+        isOverlayVisible = false;
+    }
+};
+
+// ==========================================
+// MAIN APPLICATION WINDOW
+// ==========================================
+class FocusApp : public QMainWindow {
+public:
+    OverlayWindow* overlay;
+    QSystemTrayIcon* trayIcon;
+    QTimer* coreTimer;
+    
+    // UI Elements
+    QLineEdit* passEdit;
+    QSpinBox* hrSpin;
+    QSpinBox* minSpin;
+    QPushButton* btnStart;
+    QPushButton* btnStop;
+    QLabel* lblTimeLeft;
+    
+    QRadioButton* rbBlock;
+    QRadioButton* rbAllow;
+    
+    QListWidget* listBlockApps;
+    QListWidget* listBlockWebs;
+    QListWidget* listRunning;
+    QListWidget* listAllowApps;
+    QListWidget* listAllowWebs;
+
+    QLineEdit* inputBlockApp;
+    QComboBox* inputBlockWeb;
+    QLineEdit* inputAllowApp;
+    QComboBox* inputAllowWeb;
+
+    FocusApp() {
+        setWindowTitle("Focus Mode Manager - Pro Edition");
+        resize(1000, 700);
+        
+        // Apply Premium QSS (Qt Style Sheets)
+        setStyleSheet(R"(
+            QMainWindow { background-color: #f4f6f9; }
+            QLabel { font-family: 'Segoe UI'; font-size: 14px; color: #2c3e50; font-weight: 500; }
+            QLineEdit, QSpinBox, QComboBox, QListWidget { 
+                background-color: #ffffff; border: 1px solid #ced4da; border-radius: 6px; padding: 5px; font-size: 14px; color: #495057;
+            }
+            QListWidget::item { padding: 5px; }
+            QListWidget::item:selected { background-color: #007bff; color: white; }
+            QPushButton { 
+                font-family: 'Segoe UI'; font-weight: bold; font-size: 14px; color: white; 
+                background-color: #007bff; border-radius: 6px; padding: 8px 15px; 
+            }
+            QPushButton:hover { background-color: #0056b3; }
+            QPushButton#btnStart { background-color: #28a745; }
+            QPushButton#btnStart:hover { background-color: #218838; }
+            QPushButton#btnStop { background-color: #dc3545; }
+            QPushButton#btnStop:hover { background-color: #c82333; }
+            QPushButton#btnRemove { background-color: #6c757d; }
+            QPushButton#btnRemove:hover { background-color: #5a6268; }
+            QRadioButton { font-size: 14px; font-weight: bold; color: #2c3e50; }
+        )");
+
+        QWidget* centralWidget = new QWidget(this);
+        setCentralWidget(centralWidget);
+        QVBoxLayout* mainLayout = new QVBoxLayout(centralWidget);
+        mainLayout->setContentsMargins(20, 20, 20, 20);
+        mainLayout->setSpacing(15);
+
+        // --- TOP BAR ---
+        QHBoxLayout* topLayout = new QHBoxLayout();
+        topLayout->addWidget(new QLabel("Password:"));
+        passEdit = new QLineEdit();
+        passEdit->setEchoMode(QLineEdit::Password);
+        passEdit->setFixedWidth(120);
+        topLayout->addWidget(passEdit);
+
+        topLayout->addSpacing(20);
+        topLayout->addWidget(new QLabel("Time (H:M):"));
+        hrSpin = new QSpinBox(); hrSpin->setRange(0, 24); hrSpin->setFixedWidth(60);
+        topLayout->addWidget(hrSpin);
+        topLayout->addWidget(new QLabel(":"));
+        minSpin = new QSpinBox(); minSpin->setRange(0, 59); minSpin->setFixedWidth(60);
+        topLayout->addWidget(minSpin);
+
+        topLayout->addSpacing(30);
+        btnStart = new QPushButton("START FOCUS"); btnStart->setObjectName("btnStart");
+        btnStop = new QPushButton("STOP FOCUS"); btnStop->setObjectName("btnStop");
+        topLayout->addWidget(btnStart);
+        topLayout->addWidget(btnStop);
+        
+        topLayout->addStretch();
+        lblTimeLeft = new QLabel(""); 
+        lblTimeLeft->setStyleSheet("color: #dc3545; font-size: 18px; font-weight: bold;");
+        topLayout->addWidget(lblTimeLeft);
+        mainLayout->addLayout(topLayout);
+
+        // --- RADIO BUTTONS ---
+        QHBoxLayout* radioLayout = new QHBoxLayout();
+        radioLayout->setAlignment(Qt::AlignCenter);
+        rbBlock = new QRadioButton("Block List Mode"); rbBlock->setChecked(true);
+        rbAllow = new QRadioButton("Allow List Mode");
+        radioLayout->addWidget(rbBlock);
+        radioLayout->addSpacing(50);
+        radioLayout->addWidget(rbAllow);
+        mainLayout->addLayout(radioLayout);
+
+        // --- 3 COLUMNS GRID ---
+        QGridLayout* grid = new QGridLayout();
+        grid->setSpacing(20);
+
+        // Col 1: Block List
+        grid->addWidget(new QLabel("Block Apps (.exe):"), 0, 0);
+        QHBoxLayout* h1 = new QHBoxLayout();
+        inputBlockApp = new QLineEdit(); h1->addWidget(inputBlockApp);
+        QPushButton* btnAddBApp = new QPushButton("ADD"); h1->addWidget(btnAddBApp);
+        grid->addLayout(h1, 1, 0);
+        listBlockApps = new QListWidget(); grid->addWidget(listBlockApps, 2, 0);
+        QPushButton* btnRemBApp = new QPushButton("Remove Selected"); btnRemBApp->setObjectName("btnRemove");
+        grid->addWidget(btnRemBApp, 3, 0);
+
+        grid->addWidget(new QLabel("Block Websites:"), 4, 0);
+        QHBoxLayout* h2 = new QHBoxLayout();
+        inputBlockWeb = new QComboBox(); inputBlockWeb->setEditable(true); h2->addWidget(inputBlockWeb);
+        QPushButton* btnAddBWeb = new QPushButton("ADD"); h2->addWidget(btnAddBWeb);
+        grid->addLayout(h2, 5, 0);
+        listBlockWebs = new QListWidget(); grid->addWidget(listBlockWebs, 6, 0);
+        QPushButton* btnRemBWeb = new QPushButton("Remove Selected"); btnRemBWeb->setObjectName("btnRemove");
+        grid->addWidget(btnRemBWeb, 7, 0);
+
+        // Col 2: Running Apps
+        grid->addWidget(new QLabel("Running Apps (Select -> Add):"), 0, 1);
+        listRunning = new QListWidget(); grid->addWidget(listRunning, 1, 1, 6, 1);
+        QPushButton* btnAddRunning = new QPushButton("Add to Current List");
+        grid->addWidget(btnAddRunning, 7, 1);
+
+        // Col 3: Allow List
+        grid->addWidget(new QLabel("Allow Apps (.exe):"), 0, 2);
+        QHBoxLayout* h3 = new QHBoxLayout();
+        inputAllowApp = new QLineEdit(); h3->addWidget(inputAllowApp);
+        QPushButton* btnAddAApp = new QPushButton("ADD"); h3->addWidget(btnAddAApp);
+        grid->addLayout(h3, 1, 2);
+        listAllowApps = new QListWidget(); grid->addWidget(listAllowApps, 2, 2);
+        QPushButton* btnRemAApp = new QPushButton("Remove Selected"); btnRemAApp->setObjectName("btnRemove");
+        grid->addWidget(btnRemAApp, 3, 2);
+
+        grid->addWidget(new QLabel("Allow Websites:"), 4, 2);
+        QHBoxLayout* h4 = new QHBoxLayout();
+        inputAllowWeb = new QComboBox(); inputAllowWeb->setEditable(true); h4->addWidget(inputAllowWeb);
+        QPushButton* btnAddAWeb = new QPushButton("ADD"); h4->addWidget(btnAddAWeb);
+        grid->addLayout(h4, 5, 2);
+        listAllowWebs = new QListWidget(); grid->addWidget(listAllowWebs, 6, 2);
+        QPushButton* btnRemAWeb = new QPushButton("Remove Selected"); btnRemAWeb->setObjectName("btnRemove");
+        grid->addWidget(btnRemAWeb, 7, 2);
+
+        mainLayout->addLayout(grid);
+
+        // Populate Web Combos
+        QStringList popSites = {"facebook.com", "youtube.com", "instagram.com", "tiktok.com", "reddit.com", "netflix.com"};
+        inputBlockWeb->addItems(popSites); inputAllowWeb->addItems(popSites);
+        inputBlockWeb->setCurrentText(""); inputAllowWeb->setCurrentText("");
+
+        // Initialize Overlay & Tray
+        overlay = new OverlayWindow();
+        setupTrayIcon();
+
+        // Load Data
+        LoadDataList("blocked_apps.txt", blockedApps, listBlockApps);
+        LoadDataList("blocked_webs.txt", blockedWebs, listBlockWebs);
+        LoadDataList("allowed_apps.txt", allowedApps, listAllowApps);
+        LoadDataList("allowed_webs.txt", allowedWebs, listAllowWebs);
+        refreshRunningApps();
+
+        // ==========================================
+        // SIGNALS AND SLOTS (LAMBDAS)
+        // ==========================================
+        connect(passEdit, &QLineEdit::textChanged, [=](const QString &text){
+            bool hasPass = !text.isEmpty();
+            hrSpin->setDisabled(hasPass); minSpin->setDisabled(hasPass);
+        });
+        auto timeChange = [=](int){
+            bool hasTime = (hrSpin->value() > 0 || minSpin->value() > 0);
+            passEdit->setDisabled(hasTime);
+        };
+        connect(hrSpin, QOverload<int>::of(&QSpinBox::valueChanged), timeChange);
+        connect(minSpin, QOverload<int>::of(&QSpinBox::valueChanged), timeChange);
+
+        auto toggleMode = [=](){
+            bool isAllow = rbAllow->isChecked();
+            inputAllowApp->setEnabled(isAllow); btnAddAApp->setEnabled(isAllow); listAllowApps->setEnabled(isAllow); btnRemAApp->setEnabled(isAllow);
+            inputAllowWeb->setEnabled(isAllow); btnAddAWeb->setEnabled(isAllow); listAllowWebs->setEnabled(isAllow); btnRemAWeb->setEnabled(isAllow);
+            
+            inputBlockApp->setEnabled(!isAllow); btnAddBApp->setEnabled(!isAllow); listBlockApps->setEnabled(!isAllow); btnRemBApp->setEnabled(!isAllow);
+            inputBlockWeb->setEnabled(!isAllow); btnAddBWeb->setEnabled(!isAllow); listBlockWebs->setEnabled(!isAllow); btnRemBWeb->setEnabled(!isAllow);
+        };
+        connect(rbBlock, &QRadioButton::toggled, toggleMode);
+        connect(rbAllow, &QRadioButton::toggled, toggleMode);
+        toggleMode(); // Apply initial state
+
+        // ADD/REM BUTTONS
+        connect(btnAddBApp, &QPushButton::clicked, [=](){ addToList(inputBlockApp, listBlockApps, blockedApps, "blocked_apps.txt"); });
+        connect(btnAddAApp, &QPushButton::clicked, [=](){ addToList(inputAllowApp, listAllowApps, allowedApps, "allowed_apps.txt"); });
+        connect(btnRemBApp, &QPushButton::clicked, [=](){ remFromList(listBlockApps, blockedApps, "blocked_apps.txt"); });
+        connect(btnRemAApp, &QPushButton::clicked, [=](){ remFromList(listAllowApps, allowedApps, "allowed_apps.txt"); });
+        
+        connect(btnAddBWeb, &QPushButton::clicked, [=](){ addToListCombo(inputBlockWeb, listBlockWebs, blockedWebs, "blocked_webs.txt"); });
+        connect(btnAddAWeb, &QPushButton::clicked, [=](){ addToListCombo(inputAllowWeb, listAllowWebs, allowedWebs, "allowed_webs.txt"); });
+        connect(btnRemBWeb, &QPushButton::clicked, [=](){ remFromList(listBlockWebs, blockedWebs, "blocked_webs.txt"); });
+        connect(btnRemAWeb, &QPushButton::clicked, [=](){ remFromList(listAllowWebs, allowedWebs, "allowed_webs.txt"); });
+
+        connect(btnAddRunning, &QPushButton::clicked, [=](){
+            QListWidgetItem* it = listRunning->currentItem();
+            if(!it) { QMessageBox::information(this, "Info", "Select an app first!"); return; }
+            QString app = it->text();
+            if(rbAllow->isChecked()){
+                if(find(allowedApps.begin(), allowedApps.end(), app.toStdString()) == allowedApps.end()){
+                    allowedApps.push_back(app.toStdString()); listAllowApps->addItem(app); SaveDataList("allowed_apps.txt", allowedApps);
+                }
+            } else {
+                if(find(blockedApps.begin(), blockedApps.end(), app.toStdString()) == blockedApps.end()){
+                    blockedApps.push_back(app.toStdString()); listBlockApps->addItem(app); SaveDataList("blocked_apps.txt", blockedApps);
                 }
             }
-        } else if (p->vkCode == VK_SPACE || p->vkCode == VK_RETURN) {
-            currentWord.clear();
-        }
-    }
-    return CallNextHookEx(NULL, nCode, wParam, lParam);
-}
-#endif
-
-// ====================== Halal Guard Overlay ======================
-class HalalGuardOverlay : public QWidget {
-    Q_OBJECT
-public:
-    explicit HalalGuardOverlay(QWidget* parent = nullptr) : QWidget(parent) {
-        setWindowFlags(Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint | Qt::Tool);
-        setStyleSheet("background-color: black;");
-        QVBoxLayout* layout = new QVBoxLayout(this);
-        layout->setAlignment(Qt::AlignCenter);
-        QLabel* label = new QLabel("⚠️  PROTECTION ACTIVE  ⚠️\n\nPlease maintain purity in your speech and typing.", this);
-        label->setAlignment(Qt::AlignCenter);
-        label->setStyleSheet("color: white; font-size: 24px; font-weight: bold;");
-        layout->addWidget(label);
-        QTimer::singleShot(3000, this, &QWidget::close);
-    }
-    void showEvent(QShowEvent* event) override {
-        if (QScreen* screen = QGuiApplication::primaryScreen()) {
-            setGeometry(screen->geometry());
-        }
-        QWidget::showEvent(event);
-    }
-};
-
-// ====================== Focus Lock Window ======================
-class FocusLockWindow : public QWidget {
-    Q_OBJECT
-public:
-    explicit FocusLockWindow(const QString& profileName, int remainingSeconds, QWidget* parent = nullptr)
-        : QWidget(parent), m_remainingSeconds(remainingSeconds) {
-        
-        Q_UNUSED(profileName); // FIX: Suppress unused parameter warning
-
-        setWindowFlags(Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint | Qt::Tool);
-        setStyleSheet("background-color: #1E293B;");
-        if (QScreen* screen = QGuiApplication::primaryScreen()) {
-            setGeometry(screen->geometry());
-        }
-        QVBoxLayout* layout = new QVBoxLayout(this);
-        layout->setAlignment(Qt::AlignCenter);
-        
-        QLabel* titleLabel = new QLabel("🔒 FOCUS MODE ACTIVE", this);
-        titleLabel->setStyleSheet("color: #3B82F6; font-size: 32px; font-weight: bold; margin-bottom: 20px;");
-        titleLabel->setAlignment(Qt::AlignCenter);
-        layout->addWidget(titleLabel);
-        
-        m_timeLabel = new QLabel(this);
-        m_timeLabel->setStyleSheet("color: #F59E0B; font-size: 48px; font-weight: bold; font-family: monospace;");
-        m_timeLabel->setAlignment(Qt::AlignCenter);
-        layout->addWidget(m_timeLabel);
-        
-        updateTimerDisplay();
-        m_timer = new QTimer(this);
-        connect(m_timer, &QTimer::timeout, this, &FocusLockWindow::updateTimer);
-        m_timer->start(1000);
-        
-        installEventFilter(this);
-    }
-
-    bool eventFilter(QObject* obj, QEvent* event) override {
-        if (event->type() == QEvent::KeyPress) {
-            QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
-            if (keyEvent->key() == Qt::Key_F4 || keyEvent->key() == Qt::Key_Tab || keyEvent->key() == Qt::Key_Escape || keyEvent->key() == Qt::Key_Super_L) {
-                return true;
-            }
-        }
-        return QWidget::eventFilter(obj, event);
-    }
-    
-signals:
-    void sessionEnded();
-
-private slots:
-    void updateTimer() {
-        if (m_remainingSeconds > 0) {
-            m_remainingSeconds--;
-            updateTimerDisplay();
-        } else {
-            m_timer->stop();
-            emit sessionEnded();
-            close();
-        }
-    }
-private:
-    void updateTimerDisplay() {
-        int hours = m_remainingSeconds / 3600;
-        int minutes = (m_remainingSeconds % 3600) / 60;
-        int seconds = m_remainingSeconds % 60;
-        m_timeLabel->setText(QString("%1:%2:%3").arg(hours, 2, 10, QChar('0')).arg(minutes, 2, 10, QChar('0')).arg(seconds, 2, 10, QChar('0')));
-    }
-    int m_remainingSeconds;
-    QLabel* m_timeLabel;
-    QTimer* m_timer;
-};
-
-// ====================== Main Window ======================
-class RasBlockerPro : public QMainWindow {
-    Q_OBJECT
-public:
-    RasBlockerPro(QWidget* parent = nullptr) : QMainWindow(parent), m_activeLockWindow(nullptr) {
-        setWindowTitle("RasBlocker Pro");
-        setMinimumSize(800, 600);
-        
-        setupTrayIcon();
-        setupAutoStart(); 
-        
-        QWidget* central = new QWidget(this);
-        QVBoxLayout* layout = new QVBoxLayout(central);
-        QPushButton* startBtn = new QPushButton("Start 1 Hour Focus Session", this);
-        layout->addWidget(startBtn);
-        setCentralWidget(central);
-        
-        connect(startBtn, &QPushButton::clicked, [this]() {
-            startSession(3600); // 1 Hour
         });
 
-        connect(KeyboardMonitor::instance(), &KeyboardMonitor::forbiddenWordTyped,
-                this, &RasBlockerPro::onForbiddenWordTyped);
-        
-        KeyboardMonitor::instance()->startMonitoring();
-        checkPreviousSession();
+        connect(btnStart, &QPushButton::clicked, this, &FocusApp::startFocus);
+        connect(btnStop, &QPushButton::clicked, this, &FocusApp::stopFocus);
+
+        // Core Timer for Filtering (Every 1 Sec)
+        coreTimer = new QTimer(this);
+        connect(coreTimer, &QTimer::timeout, this, &FocusApp::coreLoop);
+        coreTimer->start(1000);
     }
 
-    ~RasBlockerPro() {
-        KeyboardMonitor::instance()->stopMonitoring();
-    }
-
-protected:
-    void closeEvent(QCloseEvent *event) override {
-        if (trayIcon->isVisible() && !m_isForceQuitting) {
-            QMessageBox::information(this, "Running in Background", "App is still guarding your PC in the background.");
-            hide();
-            event->ignore();
-        }
-    }
-
-private slots:
-    void startSession(int durationSeconds) {
-        if (m_activeLockWindow) return;
-        
-        QDateTime endTime = QDateTime::currentDateTime().addSecs(durationSeconds);
-        QSettings settings("RasBlocker", "Pro");
-        settings.setValue("activeSessionEndTime", endTime);
-        
-        launchLockWindow(durationSeconds);
-    }
-
-    void onForbiddenWordTyped(const QString& word) {
-        Q_UNUSED(word); // FIX: Suppress unused parameter warning
-        HalalGuardOverlay* overlay = new HalalGuardOverlay();
-        overlay->show();
-    }
-
-    void quitApplication() {
-        m_isForceQuitting = true;
-        QApplication::quit();
-    }
-
-private:
     void setupTrayIcon() {
         trayIcon = new QSystemTrayIcon(this);
-        trayIcon->setIcon(style()->standardIcon(QStyle::SP_ComputerIcon));
+        trayIcon->setIcon(QIcon("icon.ico")); // ensure icon.ico exists in build folder
         
-        QMenu* trayMenu = new QMenu(this);
-        QAction* showAction = trayMenu->addAction("Open Dashboard");
-        QAction* quitAction = trayMenu->addAction("Quit (Requires Admin)");
+        QMenu* menu = new QMenu(this);
+        QAction* restoreAct = new QAction("Restore", this);
+        connect(restoreAct, &QAction::triggered, this, &QWidget::showNormal);
+        menu->addAction(restoreAct);
         
-        connect(showAction, &QAction::triggered, this, &QWidget::show);
-        connect(quitAction, &QAction::triggered, this, &RasBlockerPro::quitApplication);
-        
-        trayIcon->setContextMenu(trayMenu);
+        trayIcon->setContextMenu(menu);
+        connect(trayIcon, &QSystemTrayIcon::activated, [=](QSystemTrayIcon::ActivationReason reason){
+            if(reason == QSystemTrayIcon::DoubleClick) showNormal();
+        });
         trayIcon->show();
     }
 
-    void setupAutoStart() {
-        QSettings bootSettings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", QSettings::NativeFormat);
-        QString appPath = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
-        bootSettings.setValue("RasBlockerPro", appPath);
+    void closeEvent(QCloseEvent *event) override {
+        event->ignore(); // Don't close, hide to tray
+        hide();
     }
 
-    void checkPreviousSession() {
-        QSettings settings("RasBlocker", "Pro");
-        if (settings.contains("activeSessionEndTime")) {
-            QDateTime endTime = settings.value("activeSessionEndTime").toDateTime();
-            QDateTime now = QDateTime::currentDateTime();
-            
-            if (endTime > now) {
-                int remainingSeconds = now.secsTo(endTime);
-                launchLockWindow(remainingSeconds);
-            } else {
-                settings.remove("activeSessionEndTime");
+    void refreshRunningApps() {
+        listRunning->clear();
+        vector<string> rProc = GetRunningProcesses();
+        for (const auto& proc : rProc) {
+            string lp = proc; transform(lowP.begin(), lp.end(), lp.begin(), ::tolower);
+            if (find(hiddenUIProcesses.begin(), hiddenUIProcesses.end(), lp) == hiddenUIProcesses.end()) {
+                listRunning->addItem(QString::fromStdString(proc));
             }
         }
     }
 
-    void launchLockWindow(int remainingSeconds) {
-        m_activeLockWindow = new FocusLockWindow("Active Profile", remainingSeconds, nullptr);
-        m_activeLockWindow->showFullScreen();
-        
-        connect(m_activeLockWindow, &FocusLockWindow::sessionEnded, this, [this]() {
-            QSettings settings("RasBlocker", "Pro");
-            settings.remove("activeSessionEndTime"); 
-            m_activeLockWindow->deleteLater();
-            m_activeLockWindow = nullptr;
-        });
+    void addToList(QLineEdit* input, QListWidget* lw, vector<string>& vec, QString file) {
+        QString text = input->text().trimmed();
+        if(!text.isEmpty()){
+            vec.push_back(text.toStdString()); lw->addItem(text); SaveDataList(file, vec); input->clear();
+        }
+    }
+    void addToListCombo(QComboBox* input, QListWidget* lw, vector<string>& vec, QString file) {
+        QString text = input->currentText().trimmed();
+        if(!text.isEmpty()){
+            vec.push_back(text.toStdString()); lw->addItem(text); SaveDataList(file, vec); input->setCurrentText("");
+        }
+    }
+    void remFromList(QListWidget* lw, vector<string>& vec, QString file) {
+        QListWidgetItem* it = lw->takeItem(lw->currentRow());
+        if(it){
+            vec.erase(remove(vec.begin(), vec.end(), it->text().toStdString()), vec.end());
+            delete it; SaveDataList(file, vec);
+        }
     }
 
-    FocusLockWindow* m_activeLockWindow;
-    QSystemTrayIcon* trayIcon;
-    bool m_isForceQuitting = false;
+    void startFocus() {
+        QString pass = passEdit->text();
+        int hrs = hrSpin->value(); int mins = minSpin->value();
+        focusTimeTotalSeconds = (hrs * 3600) + (mins * 60);
+        useAllowMode = rbAllow->isChecked();
+
+        if (!isSessionActive) {
+            if (!pass.isEmpty()) { currentSessionPass = pass.toStdString(); isPassMode = true; isTimeMode = false; isSessionActive = true; } 
+            else if (focusTimeTotalSeconds > 0) { isTimeMode = true; isPassMode = false; isSessionActive = true; timerTicks = 0; }
+
+            if (isSessionActive) {
+                QMessageBox::information(this, "Success", "Focus Mode Started!\nWindow will hide in tray.");
+                passEdit->clear(); hide();
+            } else { QMessageBox::warning(this, "Error", "Please enter a password OR set time to start!"); }
+        } else { QMessageBox::information(this, "Info", "Focus mode is already active!"); }
+    }
+
+    void stopFocus() {
+        if (isSessionActive) {
+            if (isTimeMode) { QMessageBox::warning(this, "Locked", "Time mode is active. You must wait!"); } 
+            else if (isPassMode) {
+                if (currentSessionPass == passEdit->text().toStdString()) {
+                    isSessionActive = false; lblTimeLeft->setText(""); 
+                    QMessageBox::information(this, "Success", "Focus session stopped.");
+                    passEdit->setEnabled(true); hrSpin->setEnabled(true); minSpin->setEnabled(true); passEdit->clear();
+                } else { QMessageBox::critical(this, "Error", "Wrong password!"); }
+            }
+        } else { QMessageBox::information(this, "Info", "Focus session is not active."); }
+    }
+
+    // ==========================================
+    // CORE FILTERING LOGIC (Runs every second)
+    // ==========================================
+    void coreLoop() {
+        // 1. Always On Adult Filter
+        if (!isOverlayVisible) {
+            HWND hActive = GetForegroundWindow();
+            if (hActive) {
+                char title[512];
+                if (GetWindowTextA(hActive, title, sizeof(title)) > 0) {
+                    string sTitle = title; transform(sTitle.begin(), sTitle.end(), sTitle.begin(), ::tolower);
+                    for (const auto& keyword : explicitKeywords) {
+                        if (sTitle.find(keyword) != string::npos) {
+                            ShowWindow(hActive, SW_MINIMIZE); overlay->showMessage(1); return; 
+                        }
+                    }
+                    for (const auto& web : defaultAdultWebs) {
+                        if (sTitle.find(web) != string::npos) {
+                            CloseActiveTabAndMinimize(hActive); overlay->showMessage(1); return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Focus Session Logic
+        if (isSessionActive) {
+            if (isTimeMode && focusTimeTotalSeconds > 0) {
+                timerTicks++;
+                int timeLeft = focusTimeTotalSeconds - timerTicks;
+                if (timeLeft <= 0) {
+                    isSessionActive = false; isTimeMode = false; lblTimeLeft->setText("");
+                    QMessageBox::information(this, "Success", "Focus time is over! Settings & Task Manager are unlocked.");
+                    passEdit->setEnabled(true); hrSpin->setEnabled(true); minSpin->setEnabled(true);
+                    return;
+                }
+                int h = timeLeft / 3600; int m = (timeLeft % 3600) / 60; int s = timeLeft % 60;
+                lblTimeLeft->setText(QString("Time Left: %1:%2:%3").arg(h, 2, 10, QChar('0')).arg(m, 2, 10, QChar('0')).arg(s, 2, 10, QChar('0')));
+            }
+
+            // Enforce Processes
+            HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0); PROCESSENTRY32 pe = {sizeof(pe)};
+            if (Process32First(hSnap, &pe)) {
+                do {
+                    string n = pe.szExeFile; transform(n.begin(), n.end(), n.begin(), ::tolower);
+                    if (n == "taskmgr.exe") {
+                        HANDLE ph = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
+                        if(ph) { TerminateProcess(ph, 1); CloseHandle(ph); } continue;
+                    }
+                    for(const auto& sysApp : defaultSystemBlocks) {
+                        if (n == sysApp) {
+                            HANDLE ph = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
+                            if(ph) { TerminateProcess(ph, 1); CloseHandle(ph); }
+                        }
+                    }
+                    if (useAllowMode) {
+                        bool isSystemApp = (find(systemApps.begin(), systemApps.end(), n) != systemApps.end());
+                        bool isAllowed = false;
+                        for(const auto& app : allowedApps) {
+                            string lApp = app; transform(lApp.begin(), lApp.end(), lApp.begin(), ::tolower);
+                            if (n == lApp) { isAllowed = true; break; }
+                        }
+                        if (!isSystemApp && !isAllowed) {
+                            HANDLE ph = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
+                            if(ph) { TerminateProcess(ph, 1); CloseHandle(ph); }
+                        }
+                    } else {
+                        for (const auto& app : blockedApps) {
+                            string lApp = app; transform(lApp.begin(), lApp.end(), lApp.begin(), ::tolower);
+                            if (n == lApp) {
+                                HANDLE ph = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
+                                if(ph) { TerminateProcess(ph, 1); CloseHandle(ph); }
+                            }
+                        }
+                    }
+                } while (Process32Next(hSnap, &pe));
+            }
+            CloseHandle(hSnap);
+
+            // Enforce Websites
+            if (!isOverlayVisible) {
+                HWND hActive = GetForegroundWindow();
+                if (hActive) {
+                    char title[512];
+                    if (GetWindowTextA(hActive, title, sizeof(title)) > 0) {
+                        string sTitle = title; transform(sTitle.begin(), sTitle.end(), sTitle.begin(), ::tolower);
+                        if (sTitle.find("allowed websites") != string::npos) return;
+                        for (const auto& sysTitle : defaultSystemTitles) { if (sTitle.find(sysTitle) != string::npos) { ShowWindow(hActive, SW_MINIMIZE); return; } }
+
+                        bool isBrowser = (sTitle.find("google chrome") != string::npos || sTitle.find("edge") != string::npos || sTitle.find("firefox") != string::npos || sTitle.find("brave") != string::npos);
+
+                        if (useAllowMode && isBrowser) {
+                            bool isAllowed = false;
+                            for (const auto& web : allowedWebs) {
+                                string cleanWeb = CleanURL(web); 
+                                if (!cleanWeb.empty() && sTitle.find(cleanWeb) != string::npos) { isAllowed = true; break; }
+                            }
+                            if (!isAllowed) { CloseActiveTabAndMinimize(hActive); ShowAllowedWebsitesPage(); }
+                        } else if (!useAllowMode) {
+                            for (const auto& web : blockedWebs) {
+                                string cleanWeb = CleanURL(web); 
+                                if (!cleanWeb.empty() && sTitle.find(cleanWeb) != string::npos) {
+                                    CloseActiveTabAndMinimize(hActive); 
+                                    overlay->showMessage(2); // Focus Mode Popup
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 };
 
-// ====================== Main Entry ======================
 int main(int argc, char *argv[]) {
+    // Admin Check
+    if (!IsRunAsAdmin()) {
+        char path[MAX_PATH]; GetModuleFileNameA(NULL, path, MAX_PATH);
+        SHELLEXECUTEINFOA sei = { 0 }; sei.cbSize = sizeof(sei); sei.lpVerb = "runas"; sei.lpFile = path; sei.nShow = SW_NORMAL;
+        if (!ShellExecuteExA(&sei)) { MessageBoxA(NULL, "Requires Administrator privileges!", "Error", MB_ICONERROR); }
+        return 0; 
+    }
+
     QApplication app(argc, argv);
-    app.setQuitOnLastWindowClosed(false); 
-    app.setStyle("Fusion");
     
-    RasBlockerPro window;
-    window.show(); 
-    
+    // Set Global Font
+    QFont defaultFont("Segoe UI", 10);
+    app.setFont(defaultFont);
+
+    FocusApp window;
+    window.show();
+
     return app.exec();
 }
-
-#include "main.moc"
