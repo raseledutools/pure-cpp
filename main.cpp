@@ -5,28 +5,35 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
-#include <QFrame>
 #include <QStackedWidget>
 #include <QSpinBox>
 #include <QTimer>
 #include <QLineEdit>
 #include <QListWidget>
-#include <QListWidgetItem>
 #include <QScrollArea>
+#include <QCoreApplication>
+#include <QFrame>
 
-// ==========================================
+#ifdef Q_OS_ANDROID
+#include <QtAndroidExtras/QAndroidJniObject>
+#include <QtAndroid>
+
+// অটোমেটিক পারমিশন চাওয়ার ফাংশন
+void requestPermissions() {
+    QAndroidJniObject activity = QtAndroid::androidActivity();
+    QAndroidJniObject action = QAndroidJniObject::fromString("android.settings.ACCESSIBILITY_SETTINGS");
+    QAndroidJniObject intent("android/content/Intent", "(Ljava/lang/String;)V", action.object<jstring>());
+    activity.callMethod<void>("startActivity", "(Landroid/content/Intent;)V", intent.object<jobject>());
+}
+#endif
+
 // গ্লোবাল ভ্যারিয়েবল
-// ==========================================
 int remainingSeconds = 0;
 bool isBreakActive = false;
 
-// ==========================================
-// MAIN APPLICATION CLASS
-// ==========================================
 class RasFocusPro : public QMainWindow {
     QStackedWidget *stackedWidget;
     
-    // Pages
     QWidget *homePage;
     QWidget *takeBreakPage;
     QWidget *activeSessionPage;
@@ -41,16 +48,16 @@ class RasFocusPro : public QMainWindow {
 public:
     RasFocusPro() {
         setWindowTitle("RasFocus+ Ultimate");
-        resize(420, 850); 
-
+        
+        // ফুল ডার্ক মডার্ন থিম এবং বিশাল ফন্ট সাইজ
         setStyleSheet(R"(
-            QMainWindow { background-color: #f4f6f9; }
-            QLabel { font-family: 'Segoe UI', sans-serif; color: #2c3e50; }
-            QPushButton { font-family: 'Segoe UI', sans-serif; font-weight: bold; border-radius: 15px; }
-            QLineEdit { font-size: 18px; padding: 15px; border-radius: 10px; border: 2px solid #bdc3c7; }
-            QSpinBox { font-size: 20px; padding: 5px; }
-            QListWidget { font-size: 18px; padding: 10px; border-radius: 10px; border: 1px solid #bdc3c7; background-color: white; }
-            QListWidget::item { padding: 10px; border-bottom: 1px solid #ecf0f1; }
+            QMainWindow { background-color: #121212; }
+            QLabel { color: #ffffff; font-family: 'Segoe UI', sans-serif; }
+            QPushButton { font-weight: bold; border-radius: 20px; }
+            QLineEdit { font-size: 40px; padding: 30px; border-radius: 15px; border: 2px solid #333; background-color: #1e1e1e; color: white; }
+            QSpinBox { font-size: 60px; padding: 20px; background-color: #1e1e1e; color: #00e676; border: 2px solid #333; border-radius: 15px; }
+            QListWidget { font-size: 40px; padding: 20px; border-radius: 15px; background-color: #1e1e1e; color: white; border: none; }
+            QListWidget::item { padding: 30px; border-bottom: 2px solid #333; }
         )");
 
         QWidget *centralWidget = new QWidget(this);
@@ -79,19 +86,18 @@ public:
         
         mainLayout->addWidget(stackedWidget);
 
-        // --- Bottom Navigation Bar ---
+        // --- Bottom Navigation Bar (বিশাল বাটন) ---
         QWidget *bottomNav = new QWidget();
-        bottomNav->setStyleSheet("background-color: white; border-top: 1px solid #e0e0e0; padding: 10px;");
+        bottomNav->setStyleSheet("background-color: #1e1e1e; border-top: 2px solid #333; padding: 20px;");
         QHBoxLayout *navLayout = new QHBoxLayout(bottomNav);
         
-        QPushButton *btnWhite = new QPushButton("✅ Whitelist");
-        QPushButton *btnBlack = new QPushButton("🚫 Blacklist");
-        QPushButton *btnAppCtrl = new QPushButton("⏱️ Control");
+        QPushButton *btnWhite = new QPushButton("✅ WL");
+        QPushButton *btnBlack = new QPushButton("🚫 BL");
+        QPushButton *btnAppCtrl = new QPushButton("⏱️ CTRL");
         
-        QString navStyle = "background-color: #ecf0f1; color: #34495e; font-size: 14px; padding: 15px; border-radius: 10px;";
+        QString navStyle = "background-color: #2c3e50; color: white; font-size: 35px; padding: 40px; border-radius: 20px;";
         btnWhite->setStyleSheet(navStyle); btnBlack->setStyleSheet(navStyle); btnAppCtrl->setStyleSheet(navStyle);
         
-        // ন্যাভিগেশন লিংক
         connect(btnWhite, &QPushButton::clicked, [=]() { stackedWidget->setCurrentIndex(4); });
         connect(btnBlack, &QPushButton::clicked, [=]() { stackedWidget->setCurrentIndex(5); });
         connect(btnAppCtrl, &QPushButton::clicked, [=]() { stackedWidget->setCurrentIndex(6); });
@@ -101,61 +107,66 @@ public:
 
         countdownTimer = new QTimer(this);
         connect(countdownTimer, &QTimer::timeout, this, &RasFocusPro::updateTimer);
+
+        // অ্যাপ ওপেন হওয়ার ১ সেকেন্ড পর পারমিশন চাইবে
+        #ifdef Q_OS_ANDROID
+        QTimer::singleShot(1000, [](){ requestPermissions(); });
+        #endif
     }
 
 private:
-    // ==========================================
-    // ১. Home Page
-    // ==========================================
     void setupHomePage() {
         homePage = new QWidget();
         QVBoxLayout *layout = new QVBoxLayout(homePage);
-        layout->setContentsMargins(20, 40, 20, 20);
+        layout->setContentsMargins(40, 60, 40, 40);
 
-        QLabel *title = new QLabel("RasFocus+");
-        title->setStyleSheet("font-size: 36px; font-weight: bold; color: #2980b9;");
+        QLabel *title = new QLabel("RASFOCUS+");
+        title->setStyleSheet("font-size: 90px; font-weight: bold; color: #00e676; letter-spacing: 5px;");
         title->setAlignment(Qt::AlignCenter);
         layout->addWidget(title);
         layout->addStretch();
 
         QLineEdit *txtPassword = new QLineEdit();
-        txtPassword->setPlaceholderText("Enter Security PIN");
+        txtPassword->setPlaceholderText("Enter PIN");
         txtPassword->setEchoMode(QLineEdit::Password);
         layout->addWidget(txtPassword);
 
-        QPushButton *btnTakeBreak = new QPushButton("☕ Take a Break");
-        btnTakeBreak->setStyleSheet("background-color: #8e44ad; color: white; font-size: 24px; padding: 25px; margin-top: 20px;");
+        QPushButton *btnTakeBreak = new QPushButton("☕ TAKE A BREAK");
+        btnTakeBreak->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #8e44ad, stop:1 #9b59b6); color: white; font-size: 50px; padding: 60px; margin-top: 40px;");
         connect(btnTakeBreak, &QPushButton::clicked, [=]() { stackedWidget->setCurrentIndex(1); });
         layout->addWidget(btnTakeBreak);
 
-        QPushButton *btnAutoProtect = new QPushButton("🛡️ Start Auto Protection");
-        btnAutoProtect->setStyleSheet("background-color: #27ae60; color: white; font-size: 20px; padding: 20px; margin-top: 10px;");
+        QPushButton *btnAutoProtect = new QPushButton("🛡️ ENABLE PROTECTION");
+        btnAutoProtect->setStyleSheet("background-color: #27ae60; color: white; font-size: 40px; padding: 50px; margin-top: 20px;");
+        connect(btnAutoProtect, &QPushButton::clicked, [=]() {
+            #ifdef Q_OS_ANDROID
+            requestPermissions();
+            #endif
+        });
         layout->addWidget(btnAutoProtect);
         layout->addStretch();
     }
 
-    // ==========================================
-    // ২. Take a Break Page
-    // ==========================================
     void setupTakeBreakPage() {
         takeBreakPage = new QWidget();
         QVBoxLayout *layout = new QVBoxLayout(takeBreakPage);
-        layout->setContentsMargins(20, 40, 20, 20);
+        layout->setContentsMargins(40, 60, 40, 40);
 
-        QLabel *title = new QLabel("Set Focus Duration");
-        title->setStyleSheet("font-size: 28px; font-weight: bold;");
+        QLabel *title = new QLabel("SET DURATION");
+        title->setStyleSheet("font-size: 70px; font-weight: bold; color: #00e676;");
         title->setAlignment(Qt::AlignCenter);
         layout->addWidget(title);
 
+        // মডার্ন স্ক্রলিং স্টাইল স্পিনবক্স
         QHBoxLayout *timeLayout = new QHBoxLayout();
-        QVBoxLayout *dLayout = new QVBoxLayout(); QSpinBox *spinDay = new QSpinBox(); spinDay->setMaximum(30); QLabel *lblD = new QLabel("Days"); lblD->setAlignment(Qt::AlignCenter); dLayout->addWidget(spinDay); dLayout->addWidget(lblD);
-        QVBoxLayout *hLayout = new QVBoxLayout(); QSpinBox *spinHour = new QSpinBox(); spinHour->setMaximum(23); QLabel *lblH = new QLabel("Hours"); lblH->setAlignment(Qt::AlignCenter); hLayout->addWidget(spinHour); hLayout->addWidget(lblH);
-        QVBoxLayout *mLayout = new QVBoxLayout(); QSpinBox *spinMin = new QSpinBox(); spinMin->setMaximum(59); spinMin->setValue(25); QLabel *lblM = new QLabel("Mins"); lblM->setAlignment(Qt::AlignCenter); mLayout->addWidget(spinMin); mLayout->addWidget(lblM);
+        QVBoxLayout *dLayout = new QVBoxLayout(); QSpinBox *spinDay = new QSpinBox(); spinDay->setMaximum(30); QLabel *lblD = new QLabel("Days"); lblD->setStyleSheet("font-size: 35px; color:#aaa;"); lblD->setAlignment(Qt::AlignCenter); dLayout->addWidget(spinDay); dLayout->addWidget(lblD);
+        QVBoxLayout *hLayout = new QVBoxLayout(); QSpinBox *spinHour = new QSpinBox(); spinHour->setMaximum(23); QLabel *lblH = new QLabel("Hours"); lblH->setStyleSheet("font-size: 35px; color:#aaa;"); lblH->setAlignment(Qt::AlignCenter); hLayout->addWidget(spinHour); hLayout->addWidget(lblH);
+        QVBoxLayout *mLayout = new QVBoxLayout(); QSpinBox *spinMin = new QSpinBox(); spinMin->setMaximum(59); spinMin->setValue(25); QLabel *lblM = new QLabel("Mins"); lblM->setStyleSheet("font-size: 35px; color:#aaa;"); lblM->setAlignment(Qt::AlignCenter); mLayout->addWidget(spinMin); mLayout->addWidget(lblM);
         timeLayout->addLayout(dLayout); timeLayout->addLayout(hLayout); timeLayout->addLayout(mLayout);
         layout->addLayout(timeLayout);
 
-        QPushButton *btnStartSession = new QPushButton("🚀 Start Hardcore Session");
-        btnStartSession->setStyleSheet("background-color: #c0392b; color: white; font-size: 22px; padding: 25px; margin-top: 20px;");
+        QPushButton *btnStartSession = new QPushButton("🚀 START HARDCORE SESSION");
+        btnStartSession->setStyleSheet("background-color: #e74c3c; color: white; font-size: 50px; padding: 60px; margin-top: 50px;");
         connect(btnStartSession, &QPushButton::clicked, [=]() {
             remainingSeconds = (spinDay->value() * 86400) + (spinHour->value() * 3600) + (spinMin->value() * 60);
             if(remainingSeconds > 0) { isBreakActive = true; countdownTimer->start(1000); stackedWidget->setCurrentIndex(2); }
@@ -163,164 +174,130 @@ private:
         layout->addWidget(btnStartSession);
 
         QPushButton *btnBack = new QPushButton("Back to Home");
-        btnBack->setStyleSheet("background-color: transparent; color: #7f8c8d; font-size: 18px;");
+        btnBack->setStyleSheet("background-color: transparent; color: #7f8c8d; font-size: 40px; margin-top: 30px;");
         connect(btnBack, &QPushButton::clicked, [=]() { stackedWidget->setCurrentIndex(0); });
         layout->addWidget(btnBack);
         layout->addStretch();
     }
 
-    // ==========================================
-    // ৩. Active Session Page
-    // ==========================================
     void setupActiveSessionPage() {
         activeSessionPage = new QWidget();
-        activeSessionPage->setStyleSheet("background-color: #2c3e50;");
         QVBoxLayout *layout = new QVBoxLayout(activeSessionPage);
-        layout->setContentsMargins(20, 60, 20, 40);
+        layout->setContentsMargins(40, 80, 40, 60);
 
-        QLabel *title = new QLabel("Stay Focused!"); title->setStyleSheet("font-size: 32px; font-weight: bold; color: white;"); title->setAlignment(Qt::AlignCenter); layout->addWidget(title);
+        QLabel *title = new QLabel("STAY FOCUSED!"); title->setStyleSheet("font-size: 80px; font-weight: bold; color: #e74c3c;"); title->setAlignment(Qt::AlignCenter); layout->addWidget(title);
         layout->addStretch();
 
         lblTimerDisplay = new QLabel("00:00:00");
-        lblTimerDisplay->setStyleSheet("font-size: 65px; font-weight: bold; color: #2ecc71; background-color: #34495e; border-radius: 20px; padding: 40px;");
+        lblTimerDisplay->setStyleSheet("font-size: 150px; font-weight: bold; color: #00e676; background-color: #1e1e1e; border-radius: 40px; padding: 60px; border: 3px solid #333;");
         lblTimerDisplay->setAlignment(Qt::AlignCenter);
         layout->addWidget(lblTimerDisplay);
         layout->addStretch();
 
-        QPushButton *btnOpenAllowed = new QPushButton("📱 Open Whitelisted App");
-        btnOpenAllowed->setStyleSheet("background-color: #3498db; color: white; font-size: 20px; padding: 20px; border-radius: 15px;");
+        QPushButton *btnOpenAllowed = new QPushButton("📱 Whitelisted Apps");
+        btnOpenAllowed->setStyleSheet("background-color: #3498db; color: white; font-size: 50px; padding: 50px;");
         layout->addWidget(btnOpenAllowed);
     }
 
-    // ==========================================
-    // ৪. Overlay Page (Block Screen)
-    // ==========================================
     void setupOverlayPage() {
         overlayPage = new QWidget();
         overlayPage->setStyleSheet("background-color: #c0392b;");
         QVBoxLayout *layout = new QVBoxLayout(overlayPage);
         
-        QLabel *warning = new QLabel("🛑\nAccess Blocked!");
-        warning->setStyleSheet("font-size: 40px; font-weight: bold; color: white;"); warning->setAlignment(Qt::AlignCenter); layout->addWidget(warning);
+        QLabel *warning = new QLabel("🛑\nBLOCKED!");
+        warning->setStyleSheet("font-size: 100px; font-weight: bold; color: white;"); warning->setAlignment(Qt::AlignCenter); layout->addWidget(warning);
         layout->addStretch();
 
         QLabel *quote = new QLabel("“হে মুমিনগণ! তোমরা নিজেদেরকে এবং তোমাদের পরিবার-পরিজনকে রক্ষা কর অগ্নি হতে...”\n\n- সূরা আত-তাহরীম: ৬");
-        quote->setStyleSheet("font-size: 26px; color: white; font-weight: bold;"); quote->setAlignment(Qt::AlignCenter); quote->setWordWrap(true); layout->addWidget(quote);
+        quote->setStyleSheet("font-size: 55px; color: white; font-weight: bold;"); quote->setAlignment(Qt::AlignCenter); quote->setWordWrap(true); layout->addWidget(quote);
         layout->addStretch();
 
         QPushButton *btnReturn = new QPushButton("Return to Focus");
-        btnReturn->setStyleSheet("background-color: white; color: #c0392b; font-size: 22px; padding: 20px;");
+        btnReturn->setStyleSheet("background-color: white; color: #c0392b; font-size: 50px; padding: 50px;");
         connect(btnReturn, &QPushButton::clicked, [=]() { if(isBreakActive) stackedWidget->setCurrentIndex(2); else stackedWidget->setCurrentIndex(0); });
         layout->addWidget(btnReturn);
     }
 
-    // ==========================================
-    // ৫. Whitelist Page
-    // ==========================================
     void setupWhitelistPage() {
         whitelistPage = new QWidget();
         QVBoxLayout *layout = new QVBoxLayout(whitelistPage);
-        layout->setContentsMargins(20, 30, 20, 20);
+        layout->setContentsMargins(40, 60, 40, 40);
 
-        QLabel *title = new QLabel("✅ Allowed Apps & Sites");
-        title->setStyleSheet("font-size: 26px; font-weight: bold;"); layout->addWidget(title);
+        QLabel *title = new QLabel("✅ WHITELIST");
+        title->setStyleSheet("font-size: 60px; font-weight: bold; color: #00e676;"); layout->addWidget(title);
 
         QListWidget *listWidget = new QListWidget();
-        QStringList dummyApps = {"Calculator", "Dictionary", "Notes", "edu.duet.bd (Website)"};
+        QStringList dummyApps = {"Calculator", "Dictionary", "Notes"};
         for(const QString &app : dummyApps) {
             QListWidgetItem *item = new QListWidgetItem(app, listWidget);
-            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-            item->setCheckState(Qt::Checked);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable); item->setCheckState(Qt::Checked);
         }
         layout->addWidget(listWidget);
 
-        QHBoxLayout *addLayout = new QHBoxLayout();
-        QLineEdit *txtAdd = new QLineEdit(); txtAdd->setPlaceholderText("Add custom URL/App");
-        QPushButton *btnAdd = new QPushButton("Add"); btnAdd->setStyleSheet("background-color: #2980b9; color: white; padding: 15px;");
-        addLayout->addWidget(txtAdd); addLayout->addWidget(btnAdd);
-        layout->addLayout(addLayout);
-
-        QPushButton *btnBack = new QPushButton("Save & Back");
-        btnBack->setStyleSheet("background-color: #ecf0f1; font-size: 18px; padding: 15px;");
+        QPushButton *btnBack = new QPushButton("SAVE");
+        btnBack->setStyleSheet("background-color: #2980b9; color: white; font-size: 45px; padding: 40px;");
         connect(btnBack, &QPushButton::clicked, [=]() { stackedWidget->setCurrentIndex(0); });
         layout->addWidget(btnBack);
     }
 
-    // ==========================================
-    // ৬. Blacklist Page
-    // ==========================================
     void setupBlacklistPage() {
         blacklistPage = new QWidget();
         QVBoxLayout *layout = new QVBoxLayout(blacklistPage);
-        layout->setContentsMargins(20, 30, 20, 20);
+        layout->setContentsMargins(40, 60, 40, 40);
 
-        QLabel *title = new QLabel("🚫 Blocked Apps & Sites");
-        title->setStyleSheet("font-size: 26px; font-weight: bold; color: #c0392b;"); layout->addWidget(title);
+        QLabel *title = new QLabel("🚫 BLACKLIST");
+        title->setStyleSheet("font-size: 60px; font-weight: bold; color: #e74c3c;"); layout->addWidget(title);
 
         QListWidget *listWidget = new QListWidget();
-        QStringList dummyApps = {"Facebook", "Instagram", "TikTok", "Chrome (Browser)"};
+        QStringList dummyApps = {"Facebook", "Instagram", "Chrome"};
         for(const QString &app : dummyApps) {
             QListWidgetItem *item = new QListWidgetItem(app, listWidget);
-            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-            item->setCheckState(Qt::Checked);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable); item->setCheckState(Qt::Checked);
         }
         layout->addWidget(listWidget);
 
-        QHBoxLayout *addLayout = new QHBoxLayout();
-        QLineEdit *txtAdd = new QLineEdit(); txtAdd->setPlaceholderText("Enter Adult Keyword / URL");
-        QPushButton *btnAdd = new QPushButton("Block"); btnAdd->setStyleSheet("background-color: #c0392b; color: white; padding: 15px;");
-        addLayout->addWidget(txtAdd); addLayout->addWidget(btnAdd);
-        layout->addLayout(addLayout);
-
-        QPushButton *btnBack = new QPushButton("Save & Back");
-        btnBack->setStyleSheet("background-color: #ecf0f1; font-size: 18px; padding: 15px;");
+        QPushButton *btnBack = new QPushButton("SAVE");
+        btnBack->setStyleSheet("background-color: #c0392b; color: white; font-size: 45px; padding: 40px;");
         connect(btnBack, &QPushButton::clicked, [=]() { stackedWidget->setCurrentIndex(0); });
         layout->addWidget(btnBack);
     }
 
-    // ==========================================
-    // ৭. Individual App Control Page
-    // ==========================================
     void setupAppControlPage() {
         appControlPage = new QWidget();
         QVBoxLayout *layout = new QVBoxLayout(appControlPage);
-        layout->setContentsMargins(20, 30, 20, 20);
+        layout->setContentsMargins(40, 60, 40, 40);
 
-        QLabel *title = new QLabel("⏱️ Daily App Limits");
-        title->setStyleSheet("font-size: 26px; font-weight: bold;"); layout->addWidget(title);
+        QLabel *title = new QLabel("⏱️ APP LIMITS");
+        title->setStyleSheet("font-size: 60px; font-weight: bold; color: #f1c40f;"); layout->addWidget(title);
 
-        // ডেমো অ্যাপ লিস্ট উইথ স্পিনবক্স (টাইম সেট করার জন্য)
         QScrollArea *scrollArea = new QScrollArea();
         QWidget *scrollWidget = new QWidget();
         QVBoxLayout *scrollLayout = new QVBoxLayout(scrollWidget);
+        scrollLayout->setSpacing(20);
         
-        QStringList controlApps = {"YouTube", "WhatsApp", "Telegram", "Reddit"};
+        QStringList controlApps = {"YouTube", "WhatsApp"};
         for(const QString &app : controlApps) {
             QFrame *frame = new QFrame();
-            frame->setStyleSheet("background-color: white; border-radius: 10px; padding: 10px; border: 1px solid #bdc3c7;");
+            frame->setStyleSheet("background-color: #1e1e1e; border-radius: 20px; padding: 30px; border: 2px solid #333;");
             QHBoxLayout *fLayout = new QHBoxLayout(frame);
-            
-            QLabel *lblApp = new QLabel(app); lblApp->setStyleSheet("font-size: 18px; font-weight: bold; border:none;");
-            QSpinBox *spinH = new QSpinBox(); spinH->setSuffix(" h"); spinH->setMaximum(23);
-            QSpinBox *spinM = new QSpinBox(); spinM->setSuffix(" m"); spinM->setMaximum(59); spinM->setValue(30);
-            
+            QLabel *lblApp = new QLabel(app); lblApp->setStyleSheet("font-size: 45px; font-weight: bold;");
+            QSpinBox *spinH = new QSpinBox(); spinH->setSuffix("h"); spinH->setMaximum(23);
+            QSpinBox *spinM = new QSpinBox(); spinM->setSuffix("m"); spinM->setMaximum(59); spinM->setValue(30);
             fLayout->addWidget(lblApp); fLayout->addStretch(); fLayout->addWidget(spinH); fLayout->addWidget(spinM);
             scrollLayout->addWidget(frame);
         }
         scrollLayout->addStretch();
         scrollArea->setWidget(scrollWidget);
         scrollArea->setWidgetResizable(true);
+        scrollArea->setStyleSheet("border: none; background: transparent;");
         layout->addWidget(scrollArea);
 
-        QPushButton *btnBack = new QPushButton("Save Rules & Back");
-        btnBack->setStyleSheet("background-color: #27ae60; color: white; font-size: 18px; padding: 15px;");
+        QPushButton *btnBack = new QPushButton("SAVE");
+        btnBack->setStyleSheet("background-color: #f39c12; color: white; font-size: 45px; padding: 40px;");
         connect(btnBack, &QPushButton::clicked, [=]() { stackedWidget->setCurrentIndex(0); });
         layout->addWidget(btnBack);
     }
 
-    // ==========================================
-    // Timer Update Logic
-    // ==========================================
     void updateTimer() {
         if (remainingSeconds > 0) {
             remainingSeconds--;
@@ -338,8 +315,12 @@ private:
 };
 
 int main(int argc, char *argv[]) {
+    // মোবাইল হাই-রেজুলেশন ফিক্স (লেখা এবং বাটনগুলো মোবাইলের স্ক্রিন অনুযায়ী বড় হবে)
+    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+
     QApplication app(argc, argv);
     RasFocusPro window;
-    window.show();
+    window.showMaximized(); 
     return app.exec();
 }
