@@ -99,7 +99,8 @@ LRESULT CALLBACK KeyboardMonitor::keyboardProc(int nCode, WPARAM wParam, LPARAM 
         KBDLLHOOKSTRUCT* p = (KBDLLHOOKSTRUCT*)lParam;
         static QString currentWord;
         if (p->vkCode >= 'A' && p->vkCode <= 'Z') {
-            currentWord.append(QChar(p->vkCode));
+            // FIX: Explicitly cast DWORD to uint to resolve ambiguity
+            currentWord.append(QChar(static_cast<uint>(p->vkCode)));
             QString wordLower = currentWord.toLower();
             QStringList forbidden = {"porn", "xxx", "adult", "sex", "nude", "erotic"};
             for (const QString& f : forbidden) {
@@ -146,6 +147,9 @@ class FocusLockWindow : public QWidget {
 public:
     explicit FocusLockWindow(const QString& profileName, int remainingSeconds, QWidget* parent = nullptr)
         : QWidget(parent), m_remainingSeconds(remainingSeconds) {
+        
+        Q_UNUSED(profileName); // FIX: Suppress unused parameter warning
+
         setWindowFlags(Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint | Qt::Tool);
         setStyleSheet("background-color: #1E293B;");
         if (QScreen* screen = QGuiApplication::primaryScreen()) {
@@ -217,9 +221,8 @@ public:
         setMinimumSize(800, 600);
         
         setupTrayIcon();
-        setupAutoStart(); // পিসি অন হলে চালু হবে
+        setupAutoStart(); 
         
-        // UI Setup (Simplified for clarity, you can add your full UI here)
         QWidget* central = new QWidget(this);
         QVBoxLayout* layout = new QVBoxLayout(central);
         QPushButton* startBtn = new QPushButton("Start 1 Hour Focus Session", this);
@@ -234,8 +237,6 @@ public:
                 this, &RasBlockerPro::onForbiddenWordTyped);
         
         KeyboardMonitor::instance()->startMonitoring();
-
-        // আগের সেশন চেক করা (PC রিস্টার্ট দিলেও সেশন চলবে)
         checkPreviousSession();
     }
 
@@ -244,7 +245,6 @@ public:
     }
 
 protected:
-    // টাস্কবার থেকে কেটে দিলেও ব্যাকগ্রাউন্ডে চলবে (System Tray)
     void closeEvent(QCloseEvent *event) override {
         if (trayIcon->isVisible() && !m_isForceQuitting) {
             QMessageBox::information(this, "Running in Background", "App is still guarding your PC in the background.");
@@ -257,7 +257,6 @@ private slots:
     void startSession(int durationSeconds) {
         if (m_activeLockWindow) return;
         
-        // সেশনের শেষ সময় সেভ করে রাখা
         QDateTime endTime = QDateTime::currentDateTime().addSecs(durationSeconds);
         QSettings settings("RasBlocker", "Pro");
         settings.setValue("activeSessionEndTime", endTime);
@@ -266,12 +265,12 @@ private slots:
     }
 
     void onForbiddenWordTyped(const QString& word) {
+        Q_UNUSED(word); // FIX: Suppress unused parameter warning
         HalalGuardOverlay* overlay = new HalalGuardOverlay();
         overlay->show();
     }
 
     void quitApplication() {
-        // পাসওয়ার্ড ছাড়া কুইট করতে না দেওয়ার লজিক এখানে দিতে পারেন
         m_isForceQuitting = true;
         QApplication::quit();
     }
@@ -279,7 +278,6 @@ private slots:
 private:
     void setupTrayIcon() {
         trayIcon = new QSystemTrayIcon(this);
-        // আইকন সেট করুন (বর্তমানে ডিফল্ট স্টাইল আইকন ব্যবহার হচ্ছে)
         trayIcon->setIcon(style()->standardIcon(QStyle::SP_ComputerIcon));
         
         QMenu* trayMenu = new QMenu(this);
@@ -294,7 +292,6 @@ private:
     }
 
     void setupAutoStart() {
-        // উইন্ডোজের রেজিস্ট্রিতে অটো-স্টার্ট এন্ট্রি যোগ করা
         QSettings bootSettings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", QSettings::NativeFormat);
         QString appPath = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
         bootSettings.setValue("RasBlockerPro", appPath);
@@ -307,7 +304,6 @@ private:
             QDateTime now = QDateTime::currentDateTime();
             
             if (endTime > now) {
-                // পিসি রিস্টার্ট হলেও আগের সেশনের বাকি সময় নিয়ে আবার লক চালু হবে
                 int remainingSeconds = now.secsTo(endTime);
                 launchLockWindow(remainingSeconds);
             } else {
@@ -317,12 +313,12 @@ private:
     }
 
     void launchLockWindow(int remainingSeconds) {
-        m_activeLockWindow = new FocusLockWindow("Active Profile", remainingSeconds, nullptr); // parent nullptr for independent window
+        m_activeLockWindow = new FocusLockWindow("Active Profile", remainingSeconds, nullptr);
         m_activeLockWindow->showFullScreen();
         
         connect(m_activeLockWindow, &FocusLockWindow::sessionEnded, this, [this]() {
             QSettings settings("RasBlocker", "Pro");
-            settings.remove("activeSessionEndTime"); // সেশন শেষ হলে মেমোরি থেকে মুছে ফেলা
+            settings.remove("activeSessionEndTime"); 
             m_activeLockWindow->deleteLater();
             m_activeLockWindow = nullptr;
         });
@@ -336,11 +332,10 @@ private:
 // ====================== Main Entry ======================
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
-    app.setQuitOnLastWindowClosed(false); // উইন্ডো কাটলেও অ্যাপ ব্যাকগ্রাউন্ডে চলবে
+    app.setQuitOnLastWindowClosed(false); 
     app.setStyle("Fusion");
     
     RasBlockerPro window;
-    // যদি বুট হওয়ার সময় ব্যাকগ্রাউন্ডে ওপেন করতে চান, তবে window.show(); এর বদলে একটি কন্ডিশন দিতে পারেন।
     window.show(); 
     
     return app.exec();
