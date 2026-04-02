@@ -19,8 +19,16 @@ jobs:
         distribution: 'temurin'
         java-version: '11'
 
+    # ഫিক্স ১: Java 11 সাপোর্ট করে এমন Command Line Tools নির্দিষ্ট করে দেওয়া হলো
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        cmdline-tools-version: 8512546
+
+    # ഫিক্স ২: Qt 5.15.2 এর জন্য পারফেক্ট NDK এবং Build Tools ইনস্টল করা
+    - name: Install Correct NDK for Qt 5.15
+      run: |
+        sdkmanager "ndk;21.4.7075529" "build-tools;30.0.3"
 
     - name: Install Qt for Android
       uses: jurplel/install-qt-action@v3
@@ -30,6 +38,10 @@ jobs:
         arch: 'android'
 
     - name: Build APK
+      env:
+        # NDK এবং SDK এর পারফেক্ট লোকেশন দেখিয়ে দেওয়া হলো
+        ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/21.4.7075529
+        ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       run: |
         qmake RasFocus.pro
         make -j$(nproc)
