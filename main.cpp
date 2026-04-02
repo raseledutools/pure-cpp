@@ -24,6 +24,7 @@
 #include <QUrl>
 #include <QScreen>
 #include <QFontDatabase>
+#include <QCloseEvent>  // <--- এই লাইনটি মিসিং ছিল!
 
 // Windows API
 #include <windows.h>
@@ -69,14 +70,18 @@ QStringList islamicQuotes = {
     "\"লজ্জাশীলতা কল্যাণ ছাড়া আর কিছুই বয়ে আনে না।\" - (সহীহ বুখারী)",
     "\"আর তোমরা ব্যভিচারের কাছেও যেয়ো না। নিশ্চয়ই এটা অশ্লীল কাজ এবং মন্দ পথ।\" - (সূরা আল-ইসরা: ৩২)",
     "\"প্রতিটি ধর্মের একটি নিজস্ব স্বভাব রয়েছে, আর ইসলামের স্বভাব হলো লজ্জাশীলতা।\" - (ইবনে মাজাহ)",
-    "\"আল্লাহ সবকিছু দেখছেন। নিজের চোখ ও মনকে পবিত্র রাখো।\""
+    "\"আল্লাহ সবকিছু দেখছেন। নিজের চোখ ও মনকে পবিত্র রাখো।\"",
+    "\"যে ব্যক্তি তার দুই চোয়ালের মধ্যবর্তী স্থান (জিহ্বা) এবং দুই পায়ের মধ্যবর্তী স্থানের জামানত আমাকে দেবে, আমি তার জান্নাতের জামানত দেব।\"",
+    "\"চোখের ব্যভিচার হলো (হারাম কিছুর দিকে) তাকানো।\" - (সহীহ মুসলিম)",
+    "\"ঈমান ও লজ্জাশীলতা একে অপরের সাথে যুক্ত। একটি উঠে গেলে অপরটিও উঠে যায়।\""
 };
 
 QStringList timeQuotes = {
     "\"যারা সময়কে মূল্যায়ন করে না, সময়ও তাদেরকে মূল্যায়ন করে না।\" - এ.পি.জে. আবদুল কালাম",
-    "\"আজকের দিনটি নষ্ট করার অর্থ হলো ভবিষ্যতের একটি উজ্জ্বল দিন চুরি করা।\"",
+    "\"আজকের দিনটি নষ্ট করার অর্থ হলো ভবিষ্যতের একটি উজ্জ্বল দিন চুরি করা। কাজে ফিরে যাও!\"",
     "\"বড় কিছু অর্জন করতে হলে ছোট ছোট বিভ্রান্তিগুলোকে 'না' বলতে শিখতে হবে।\"",
-    "\"সময় ও স্রোত কারও জন্য অপেক্ষা করে না। তোমার লক্ষ্যকে প্রাধান্য দাও।\""
+    "\"সময় ও স্রোত কারও জন্য অপেক্ষা করে না। তোমার লক্ষ্যকে প্রাধান্য দাও।\"",
+    "\"সাফল্যের মূল রহস্য হলো মনোযোগ ধরে রাখা। বিক্ষিপ্ত মন নিয়ে বড় কিছু জয় করা যায় না।\""
 };
 
 bool isSessionActive = false;
@@ -129,7 +134,7 @@ void CloseActiveTabAndMinimize(HWND hBrowser) {
 QStringList GetRunningProcesses() {
     QStringList processes;
     HANDLE h = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    PROCESSENTRY32W pe = {sizeof(pe)}; // Using explicit WCHAR for UNICODE safety
+    PROCESSENTRY32W pe = {sizeof(pe)}; 
     if (Process32FirstW(h, &pe)) {
         do { processes.append(QString::fromWCharArray(pe.szExeFile)); } while (Process32NextW(h, &pe));
     }
@@ -474,7 +479,11 @@ public:
         trayIcon->show();
     }
 
-    void closeEvent(QCloseEvent *event) override { event->ignore(); hide(); }
+    // উইন্ডো ক্লোজ ইভেন্ট 
+    void closeEvent(QCloseEvent *event) override { 
+        event->ignore(); 
+        hide(); 
+    }
 
     void refreshRunningApps() {
         listRunning->clear();
@@ -631,7 +640,7 @@ public:
 };
 
 int main(int argc, char *argv[]) {
-    // Admin Check using Safe WCHAR conversion
+    // Admin Check
     if (!IsRunAsAdmin()) {
         WCHAR path[MAX_PATH]; GetModuleFileNameW(NULL, path, MAX_PATH);
         SHELLEXECUTEINFOW sei = { 0 }; 
