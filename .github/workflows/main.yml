@@ -4,7 +4,7 @@ on: [push]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # লেটেস্টের বদলে স্টেবল সার্ভার ব্যবহার করছি
 
     steps:
       - name: Checkout Repository
@@ -21,6 +21,12 @@ jobs:
         id: setup-ndk
         with:
           ndk-version: r21e
+
+      - name: 🛠️ Fix Android SDK (Remove ext19 Bug)
+        run: |
+          # Qt 5.15 যেন ext19 পড়তে গিয়ে ক্র্যাশ না করে, তাই এগুলো ডিলিট করে দিচ্ছি
+          rm -rf $ANDROID_SDK_ROOT/platforms/android-36*
+          rm -rf $ANDROID_SDK_ROOT/platforms/android-35*
 
       - name: Install Qt for Android
         uses: jurplel/install-qt-action@v3
