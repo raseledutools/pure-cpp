@@ -1,11 +1,9 @@
-name: Windows Qt Build
+name: RasFocus Windows Build
 
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch: # ম্যানুয়ালি রান করার অপশন
+  workflow_dispatch:
 
 jobs:
   build:
@@ -23,23 +21,19 @@ jobs:
         target: 'desktop'
         arch: 'win64_msvc2019_64'
 
-    - name: Create Build Directory
-      run: mkdir build
+    - name: Build RasFocus
+      run: |
+        qmake RasFocus.pro
+        nmake release
 
-    - name: Configure CMake
-      working-directory: ./build
-      run: cmake .. -DCMAKE_BUILD_TYPE=Release
+    - name: Package Dependencies (windeployqt)
+      run: |
+        mkdir dist
+        copy release\RasFocus+AdultBlocker.exe dist\
+        windeployqt dist\RasFocus+AdultBlocker.exe
 
-    - name: Build
-      working-directory: ./build
-      run: cmake --build . --config Release
-
-    - name: Deploy Qt Dependencies (windeployqt)
-      working-directory: ./build/Release
-      run: windeployqt FocusPro.exe # তোমার exe ফাইলের নাম
-
-    - name: Upload Artifact
+    - name: Upload Finished Project
       uses: actions/upload-artifact@v4
       with:
-        name: FocusPro-Windows-Release
-        path: ./build/Release/
+        name: RasFocus-Release-Pack
+        path: dist/
