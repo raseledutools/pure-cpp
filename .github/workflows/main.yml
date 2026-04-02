@@ -16,6 +16,12 @@ jobs:
           java-version: '11'
           distribution: 'temurin'
 
+      - name: Set up Android NDK r21e
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r21e
+
       - name: Install Qt for Android
         uses: jurplel/install-qt-action@v3
         with:
@@ -23,6 +29,8 @@ jobs:
           target: 'android'
 
       - name: Build C++ Code and Package APK
+        env:
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           qmake RasFocus.pro
           make -j2
