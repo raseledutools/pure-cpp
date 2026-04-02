@@ -1,39 +1,45 @@
-name: Build C++ Qt App
+name: Windows Qt Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: # ম্যানুয়ালি রান করার অপশন
 
 jobs:
   build:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v3
-        with:
-          version: '6.5.3'
-          arch: 'win64_mingw'
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '5.15.2'
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_msvc2019_64'
 
-      - name: Build Preparation
-        run: mkdir build
+    - name: Create Build Directory
+      run: mkdir build
 
-      - name: Compile C++ Code
-        working-directory: ./build
-        run: |
-          qmake ../BlockerX.pro
-          mingw32-make
+    - name: Configure CMake
+      working-directory: ./build
+      run: cmake .. -DCMAKE_BUILD_TYPE=Release
 
-      - name: Deploy Windows Dependencies
-        working-directory: ./build/release
-        # এটি Qt এর .dll ফাইলগুলো exe এর সাথে যুক্ত করবে
-        run: windeployqt BlockerX.exe
+    - name: Build
+      working-directory: ./build
+      run: cmake --build . --config Release
 
-      - name: Upload EXE File
-        uses: actions/upload-artifact@v4
-        with:
-          name: RasBlocker-Pro-Windows
-          path: build/release/*
+    - name: Deploy Qt Dependencies (windeployqt)
+      working-directory: ./build/Release
+      run: windeployqt FocusPro.exe # তোমার exe ফাইলের নাম
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: FocusPro-Windows-Release
+        path: ./build/Release/
