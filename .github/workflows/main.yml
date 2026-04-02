@@ -19,17 +19,20 @@ jobs:
         distribution: 'temurin'
         java-version: '11'
 
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
     - name: Install Qt for Android
       uses: jurplel/install-qt-action@v3
       with:
         version: '5.15.2'
         target: 'android'
-        arch: 'android_armv7'
+        arch: 'android'
 
     - name: Build APK
       run: |
         qmake RasFocus.pro
-        make
+        make -j$(nproc)
         make install INSTALL_ROOT=android-build
         androiddeployqt --output android-build --verbose --input android-libRasFocusApp.so-deployment-settings.json --gradle
 
