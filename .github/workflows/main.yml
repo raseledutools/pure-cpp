@@ -27,7 +27,7 @@ jobs:
           qmake RasFocus.pro
           make -j2
           make install INSTALL_ROOT=android-build
-          androiddeployqt --input android-libRasFocusApp.so-deployment-settings.json --output android-build --gradle
+          androiddeployqt --input android-RasFocusApp-deployment-settings.json --output android-build --gradle
 
       - name: 📥 Upload APK for Rasel
         uses: actions/upload-artifact@v4
